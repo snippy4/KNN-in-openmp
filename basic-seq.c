@@ -173,8 +173,6 @@ void *writeResultsToFile(double *output, int numOfPoints, int numOfFeatures, cha
     }
 
 	fclose(file);
-
-	//if not null not returned, then it is pointer to output meaning success.
 	return output;
 }
 
@@ -206,10 +204,10 @@ void findKLowestInSubsection(double arr[], int total_size, int start_index, int 
 }
 
 double findMostFrequent(double arr[], int n) {
-    int max_count = 0;      // Maximum frequency of an element
-    double most_frequent = arr[0];  // Element with the highest frequency
+    int max_count = 0;      
+    double most_frequent = arr[0]; 
     for (int i = 0; i < n; i++) {
-        int count = 0;  // Count occurrences of arr[i]
+        int count = 0;  
         for (int j = 0; j < n; j++) {
             if (arr[j] == arr[i]) {
                 count++;
@@ -245,14 +243,14 @@ int main(int argc, char *argv[]){
 	printf("memory allocated\n");
 	printf("max i %d\n", test_rows*test_cols);
 	#pragma omp parallel for
-	for (int i = 0; i < test_rows; i++) {  // Loop over test points
-        for (int j = 0; j < train_rows; j++) {  // Loop over training points
+	for (int i = 0; i < test_rows; i++) { 
+        for (int j = 0; j < train_rows; j++) { 
             double dist = 0.0;
-            for (int d = 0; d < test_cols-1; d++) {  // Loop over features (columns)
+            for (int d = 0; d < test_cols-1; d++) {
                 double diff = test_data[i * test_cols + d] - train_data[j * train_cols + d];
                 dist += diff * diff;
             }
-            point_distances[i * train_rows + j] = dist;  // Store the calculated distance
+            point_distances[i * train_rows + j] = dist; 
         }
     }
 	int k_lowest[k];

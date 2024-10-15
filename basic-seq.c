@@ -4,6 +4,7 @@
 #include <math.h>
 #include <string.h>
 #include <stdbool.h>
+#include <omp.h>
 
 
 int readNumOfPoints(char*);
@@ -177,26 +178,102 @@ void *writeResultsToFile(double *output, int numOfPoints, int numOfFeatures, cha
 	return output;
 }
 
+typedef struct {
+    double value;
+    int index;
+} ValueIndexPair;
 
+int compare(const void *a, const void *b) {
+    if (((ValueIndexPair*)a)->value > ((ValueIndexPair*)b)->value) return 1;
+    else if (((ValueIndexPair*)a)->value < ((ValueIndexPair*)b)->value) return -1;
+    else return 0;
+}
+
+void findKLowestInSubsection(double arr[], int total_size, int start_index, int n, int k, int result_indexes[]) {
+    if (start_index + n > total_size) {
+        n = total_size - start_index;
+    }
+    ValueIndexPair *subsection = (ValueIndexPair*) malloc(n * sizeof(ValueIndexPair));
+    for (int i = 0; i < n; i++) {
+        subsection[i].value = arr[start_index + i];
+        subsection[i].index = start_index + i;
+    }
+    qsort(subsection, n, sizeof(ValueIndexPair), compare);
+    for (int i = 0; i < k && i < n; i++) {
+        result_indexes[i] = subsection[i].index;
+    }
+    free(subsection);
+}
+
+double findMostFrequent(double arr[], int n) {
+    int max_count = 0;      // Maximum frequency of an element
+    double most_frequent = arr[0];  // Element with the highest frequency
+    for (int i = 0; i < n; i++) {
+        int count = 0;  // Count occurrences of arr[i]
+        for (int j = 0; j < n; j++) {
+            if (arr[j] == arr[i]) {
+                count++;
+            }
+        }
+        if (count > max_count) {
+            max_count = count;
+            most_frequent = arr[i];
+        }
+    }
+    return most_frequent;
+}
 /**
  *this will containt the basic sequential solution to the problem
  *the goal of this program is to run and produce correct output, not to be optimised.
 */
 int main(int argc, char *argv[]){
     clock_t time = clock();
-    printf("%s\n", argv[1]);
-    printf("%s\n", argv[2]);
     int train_rows = readNumOfPoints(argv[1]);
     int train_cols = readNumOfFeatures(argv[1]);
     double *train_data = readDataPoints(argv[1], train_rows, train_cols);
     int test_rows = readNumOfPoints(argv[2]);
     int test_cols = readNumOfFeatures(argv[2]);
     double *test_data = readDataPoints(argv[2], test_rows, test_cols);
-    
-    
+    char *outfile = argv[3];
+	int k = atoi(argv[4]);
+	double dist = 0;
+	double *point_distances;
+	point_distances = malloc(train_rows*test_rows*sizeof(double));
+	if(point_distances == NULL){
+		printf("memory fail\n");
+	}
+	printf("memory allocated\n");
+	printf("max i %d\n", test_rows*test_cols);
+	for(int i =0; i<test_rows*test_cols; i+=test_cols){
+		printf("%d ", i);
+		for(int j = 0;j<train_cols*train_rows; j+=train_cols){
+			dist=0;
+			for(int d = 0; d<test_cols-1; d++){
+				dist += (test_data[i+d] - train_data[j+d])*(test_data[i+d] - train_data[j+d]);
+				
+			}
+			point_distances[(i*train_rows+j)/test_cols] = dist;
+		}
+	}
+	int k_lowest[k];
+	double class[k];
+	printf("distances calculated\n");
+	for(int i = 0; i<train_rows*test_rows; i+=train_rows){
+		findKLowestInSubsection(point_distances, train_rows*test_rows, i, train_rows, k, k_lowest);
+		for(int j = 0; j<k; j++){
+			class[j] = train_data[(k_lowest[j]%train_rows)*train_cols + train_cols-1];
+		}
+		test_data[(i/train_rows+1)*test_cols-1] = findMostFrequent(class, k);
+		for(int j = 0; j<k; j++){
+		}
+	}
+	printf("classes calculated\n");
+
+	writeResultsToFile(test_data, test_rows, test_cols, outfile);
     
     time = ( clock() - time);
     //printf("%f", (float) time / CLOCKS_PER_SEC );
+	free(point_distances);
     free(train_data);
     free(test_data);
     return 0;

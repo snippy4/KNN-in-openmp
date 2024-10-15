@@ -244,7 +244,7 @@ int main(int argc, char *argv[]){
 	}
 	printf("memory allocated\n");
 	printf("max i %d\n", test_rows*test_cols);
-	#pragma omp parralel for
+	#pragma omp parallel for
 	for (int i = 0; i < test_rows; i++) {  // Loop over test points
         for (int j = 0; j < train_rows; j++) {  // Loop over training points
             double dist = 0.0;
@@ -258,6 +258,7 @@ int main(int argc, char *argv[]){
 	int k_lowest[k];
 	double class[k];
 	printf("distances calculated\n");
+	#pragma omp parallel for
 	for(int i = 0; i<train_rows*test_rows; i+=train_rows){
 		findKLowestInSubsection(point_distances, train_rows*test_rows, i, train_rows, k, k_lowest);
 		for(int j = 0; j<k; j++){

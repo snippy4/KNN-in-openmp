@@ -244,17 +244,17 @@ int main(int argc, char *argv[]){
 	}
 	printf("memory allocated\n");
 	printf("max i %d\n", test_rows*test_cols);
-	for(int i =0; i<test_rows*test_cols; i+=test_cols){
-		printf("%d ", i);
-		for(int j = 0;j<train_cols*train_rows; j+=train_cols){
-			dist=0;
-			for(int d = 0; d<test_cols-1; d++){
-				dist += (test_data[i+d] - train_data[j+d])*(test_data[i+d] - train_data[j+d]);
-				
-			}
-			point_distances[(i*train_rows+j)/test_cols] = dist;
-		}
-	}
+	#pragma omp parralel for
+	for (int i = 0; i < test_rows; i++) {  // Loop over test points
+        for (int j = 0; j < train_rows; j++) {  // Loop over training points
+            double dist = 0.0;
+            for (int d = 0; d < test_cols-1; d++) {  // Loop over features (columns)
+                double diff = test_data[i * test_cols + d] - train_data[j * train_cols + d];
+                dist += diff * diff;
+            }
+            point_distances[i * train_rows + j] = dist;  // Store the calculated distance
+        }
+    }
 	int k_lowest[k];
 	double class[k];
 	printf("distances calculated\n");

@@ -192,13 +192,6 @@ int main(int argc, char *argv[]){
     int test_rows = readNumOfPoints(argv[2]);
     int test_cols = readNumOfFeatures(argv[2]);
     double *test_data = readDataPoints(argv[2], test_rows, test_cols);
-    for(int i = 0; i<train_rows*train_cols; i++){
-        printf("train: %lf\n", train_data[i]);
-    }
-   
-    for(int i = 0; i<test_rows*test_cols; i++){
-        printf("test: %lf\n", test_data[i]);
-    } 
     
     
     

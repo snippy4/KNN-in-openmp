@@ -204,7 +204,7 @@ int main(int argc, char *argv[]){
 		printf("Memory allocation failed for point_distances\n");
 		exit(1);
 	}
-
+    #pragma omp parallel for
 	for (int chunk_start = 0; chunk_start < test_rows; chunk_start += chunk_size) {
 		int current_chunk_size = (chunk_start + chunk_size > test_rows) ? (test_rows - chunk_start) : chunk_size;
 		processChunk(train_data, test_data, train_rows, test_rows, train_cols, test_cols, point_distances, k, chunk_start, current_chunk_size);

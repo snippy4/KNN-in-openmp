@@ -10,7 +10,6 @@
 
 int readNumOfPoints(char*);
 int readNumOfFeatures(char*);
-int readNumOfClasses(char *filename);
 double *readDataPoints(char*, int, int);
 void *writeResultsToFile(double*, int, int, char*);
 
@@ -115,8 +114,9 @@ void *writeResultsToFile(double *output, int numOfPoints, int numOfFeatures, cha
 }
 
 typedef struct {
-    double value;
-    int index;
+    double value;  // Distance
+    int index;     // Index of the training point
+    double class;  // Class of the training point
 } ValueIndexPair;
 
 int compare(const void *a, const void *b) {
@@ -125,27 +125,35 @@ int compare(const void *a, const void *b) {
     else return 0;
 }
 
-double findMostFrequent(double arr[], int n) {
+// Function to find the most frequent class with tie-breaking based on distance
+double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k) {
+    int classCount[100] = {0};  // Assuming max 100 classes
+    double most_frequent = arr[0].class; 
     int max_count = 0;
-    double most_frequent = arr[0];
-    for (int i = 0; i < n; i++) {
-        int count = 0;
-        for (int j = 0; j < n; j++) {
-            if (arr[j] == arr[i]) {
-                count++;
-            }
-        }
+
+    for (int i = 0; i < k; i++) {
+        classCount[(int)arr[i].class]++;
+    }
+
+    for (int i = 0; i < k; i++) {
+        int count = classCount[(int)arr[i].class];
         if (count > max_count) {
             max_count = count;
-            most_frequent = arr[i];
+            most_frequent = arr[i].class;
+        } else if (count == max_count) {
+            // Tie breaking: choose the closest distance
+            if (arr[i].value < arr[(int)most_frequent].value) {
+                most_frequent = arr[i].class;
+            }
         }
     }
+
     return most_frequent;
 }
 
 void processChunk(double *train_data, double *test_data, int train_rows, int test_rows, int train_cols, int test_cols, double *point_distances, int k, int chunk_start, int chunk_size) {
-	int k_lowest[k];
-	double class[k];
+	ValueIndexPair *distances = (ValueIndexPair*) malloc(train_rows * sizeof(ValueIndexPair));
+
 
 	for (int i = chunk_start; i < chunk_start + chunk_size && i < test_rows; i++) {
         for (int j = 0; j < train_rows; j++) {
@@ -155,27 +163,19 @@ void processChunk(double *train_data, double *test_data, int train_rows, int tes
                 dist += diff * diff;
             }
             point_distances[(i - chunk_start) * train_rows + j] = dist;
+            distances[j].value = dist;
+            distances[j].index = j;
+            distances[j].class = train_data[j * train_cols + (train_cols - 1)];
         }
 
 		// Sort k-nearest neighbors for this test point
-        ValueIndexPair *distances = (ValueIndexPair*) malloc(train_rows * sizeof(ValueIndexPair));
-        for (int j = 0; j < train_rows; j++) {
-            distances[j].value = point_distances[(i - chunk_start) * train_rows + j];
-            distances[j].index = j;
-        }
         qsort(distances, train_rows, sizeof(ValueIndexPair), compare);
 
-		// Store the class labels of the k nearest neighbors
-        for (int j = 0; j < k; j++) {
-            int train_idx = distances[j].index;
-            class[j] = train_data[train_idx * train_cols + (train_cols - 1)];
-        }
-
-        free(distances);
-
-		// Assign the most frequent class to the test point
-        test_data[i * test_cols + (test_cols - 1)] = findMostFrequent(class, k);
+		// Assign the most frequent class with tie-breaking to the test point
+        test_data[i * test_cols + (test_cols - 1)] = findMostFrequentWithTieBreak(distances, k);
     }
+
+	free(distances);
 }
 
 int main(int argc, char *argv[]){

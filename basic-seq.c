@@ -239,6 +239,7 @@ int main(int argc, char *argv[]){
 	point_distances = malloc(train_rows*test_rows*sizeof(double));
 	if(point_distances == NULL){
 		printf("memory fail\n");
+		exit(1);
 	}
 	printf("memory allocated\n");
 	printf("max i %d\n", test_rows*test_cols);

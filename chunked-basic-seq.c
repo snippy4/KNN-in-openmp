@@ -126,7 +126,7 @@ int compare(const void *a, const void *b) {
 }
 
 // Function to find the most frequent class with tie-breaking based on distance
-double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k) {
+double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k, int test_index) {
     int classCount[100] = {0};  // Assuming max 100 classes
     double most_frequent = arr[0].class; 
     int max_count = 0;
@@ -144,6 +144,8 @@ double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k) {
             // Tie breaking: choose the closest distance
             if (arr[i].value < arr[(int)most_frequent].value) {
                 most_frequent = arr[i].class;
+                 printf("Tie break at test point %d. Chose class %lf from closest neighbor (distance %lf)\n", 
+               test_index, most_frequent, arr[0].value);
             }
         }
     }
@@ -172,7 +174,7 @@ void processChunk(double *train_data, double *test_data, int train_rows, int tes
         qsort(distances, train_rows, sizeof(ValueIndexPair), compare);
 
 		// Assign the most frequent class with tie-breaking to the test point
-        test_data[i * test_cols + (test_cols - 1)] = findMostFrequentWithTieBreak(distances, k);
+        test_data[i * test_cols + (test_cols - 1)] = findMostFrequentWithTieBreak(distances, k, i);
     }
 
 	free(distances);

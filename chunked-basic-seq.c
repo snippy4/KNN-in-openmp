@@ -130,6 +130,8 @@ double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k, int test_index)
     int classCount[100] = {0};  // Assuming max 100 classes
     double most_frequent = arr[0].class; 
     int max_count = 0;
+    double closest_distance = arr[0].value;  // Track the closest distance
+    bool tie_occurred = false;
 
     for (int i = 0; i < k; i++) {
         classCount[(int)arr[i].class]++;
@@ -140,22 +142,25 @@ double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k, int test_index)
         if (count > max_count) {
             max_count = count;
             most_frequent = arr[i].class;
+            closest_distance = arr[i].value;  // Reset to the closest for new max
+            tie_occurred = false;  // Reset if a clear max class is found
         } else if (count == max_count) {
-            // Tie breaking: choose the closest distance
-            if (arr[i].value < arr[(int)most_frequent].value) {
+            // Tie-breaking logic: choose the class of the closest distance
+            if (arr[i].value < closest_distance) {
                 most_frequent = arr[i].class;
-                 printf("Tie break at test point %d. Chose class %lf from closest neighbor (distance %lf)\n", 
-               test_index, most_frequent, arr[0].value);
+                closest_distance = arr[i].value;  // Update to the closest distance
+                tie_occurred = true;
             }
         }
     }
+
+    // If a tie occurred, print the test index and the tie-breaking information
 
     return most_frequent;
 }
 
 void processChunk(double *train_data, double *test_data, int train_rows, int test_rows, int train_cols, int test_cols, double *point_distances, int k, int chunk_start, int chunk_size) {
 	ValueIndexPair *distances = (ValueIndexPair*) malloc(train_rows * sizeof(ValueIndexPair));
-
 
 	for (int i = chunk_start; i < chunk_start + chunk_size && i < test_rows; i++) {
         for (int j = 0; j < train_rows; j++) {
@@ -206,7 +211,7 @@ int main(int argc, char *argv[]){
 		printf("Memory allocation failed for point_distances\n");
 		exit(1);
 	}
-    #pragma omp parallel for
+	#pragma omp parallel for
 	for (int chunk_start = 0; chunk_start < test_rows; chunk_start += chunk_size) {
 		int current_chunk_size = (chunk_start + chunk_size > test_rows) ? (test_rows - chunk_start) : chunk_size;
 		processChunk(train_data, test_data, train_rows, test_rows, train_cols, test_cols, point_distances, k, chunk_start, current_chunk_size);

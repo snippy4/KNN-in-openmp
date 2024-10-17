@@ -4,7 +4,7 @@
 #include <math.h>
 #include <string.h>
 #include <stdbool.h>
-#include <omp.h>
+//#include <omp.h>
 
 
 int readNumOfPoints(char*);
@@ -243,7 +243,7 @@ int main(int argc, char *argv[]){
 	}
 	printf("memory allocated\n");
 	printf("max i %d\n", test_rows*test_cols);
-	#pragma omp parallel for
+	//#pragma omp parallel for
 	for (int i = 0; i < test_rows; i++) { 
         for (int j = 0; j < train_rows; j++) { 
             double dist = 0.0;

@@ -8,6 +8,193 @@
 #include <immintrin.h> 
 
 #define CHUNK_SIZE 10000  // Define chunk size to process large datasets
+#include<stdio.h>
+#include<stdlib.h>
+#include<math.h>
+#include<string.h>
+#include<stdbool.h>
+
+/*This code is for reading and writing to files for the 2024-25 COMP528 CA1*/
+
+/*Use the functions in this file to read from the input file, and write to the output file*/
+
+/*You should use this file when compiling your code*/
+
+/*Declare these functions at the top of each 'main' file*/
+
+/*If there are any issues with this code, please contact: h.j.forbes@liverpool.ac.uk*/
+
+int readNumOfPoints(char*);
+int readNumOfFeatures(char*);
+int readNumOfClasses(char *filename);
+double *readDataPoints(char*, int, int);
+void *writeResultsToFile(double*, int, int, char*);
+
+/*Gets the number of the coordinates in the file. Returns as a single integer*/
+int readNumOfPoints(char *filename){
+	FILE *file = fopen(filename, "r");
+	int numOfPoints = 0;
+
+	if(file == NULL){
+		return -1;
+	}
+
+	char line[1000];
+
+	printf("Reading num of points: ");
+
+	while(fgets(line, sizeof(line), file) != NULL){
+		numOfPoints++;
+	}
+	printf("%d\n", numOfPoints);
+
+	fclose(file);
+
+    return numOfPoints;
+}
+
+int readNumOfFeatures(char *filename){
+	FILE *file = fopen(filename, "r");
+
+	if(file == NULL){
+		return -1;
+	}
+
+	char line[1000];
+
+	char *p;
+
+	printf("Reading num of features: ");
+	if(fgets(line, sizeof(line), file) != NULL){
+		int numOfFeatures = 1;
+
+		for(p = line; *p != '\0'; p++){
+			if(*p == ','){
+				numOfFeatures++;
+			}
+		}
+
+		fclose(file);
+		printf("%d\n", numOfFeatures);
+		return numOfFeatures;
+	}
+
+	fclose(file);
+	return -1;
+}
+
+int readNumOfClasses(char *filename){
+	FILE *file = fopen(filename, "r");
+
+	if(file == NULL){
+		return -1;
+	}
+
+	char line[1000];
+
+	int numOfClasses = 0;
+
+	printf("Reading num of classes: ");
+	while(fgets(line, sizeof(line), file) != NULL){
+
+		char *lastcomma = strrchr(line, ',');
+		char *token = strtok(lastcomma, ",");
+
+		int class = atoi(token);
+
+		if(class > numOfClasses){
+			numOfClasses = class;
+		}
+
+	}
+
+	printf("%d\n", numOfClasses + 1);
+
+	fclose(file);
+	return numOfClasses + 1;
+}
+/*Gets the data from the file. Returns as a 2D array of doubles. 
+The program returns all the features, and the final element is the class label*/
+double *readDataPoints(char *filename, int numOfPoints, int numOfFeatures){
+	FILE *file = fopen(filename,"r");
+    int i;
+
+	char line[1000];
+    
+    if(file == NULL) {
+        printf("Unable to open file: %s\n", filename);
+        return NULL;
+    }
+
+	double *dataPoints = (double *)malloc(numOfPoints * numOfFeatures * sizeof(double *));
+
+	if(dataPoints == NULL){
+		return NULL;
+	}
+
+	int lineNum = 0;
+
+	int featureIndex;
+
+
+	printf("Reading data points: ");
+	while(fgets(line, sizeof(line), file) != NULL && lineNum < numOfPoints){
+		char* token = strtok(line, ",");
+		featureIndex = 0;
+
+		while(token != NULL && featureIndex < numOfFeatures){
+			
+			dataPoints[lineNum * numOfFeatures + featureIndex] = atof(token);
+			//if(lineNum<10) printf("LineNum: %d, NumFeatures: %d, Value = %f\n", lineNum, numOfFeatures, atof(token));
+			token = strtok(NULL, ",");
+			featureIndex++;
+		}
+
+		//printf("\n");
+
+		lineNum++;
+
+		/*
+		if (sscanf(line, "%lf,%lf", &x, &y) == 2){
+			coords[lineNum][0] = x;
+			coords[lineNum][1] = y;
+			lineNum++;
+		}*/
+	}
+
+	printf("%d\n", lineNum + 1);
+
+	fclose(file);
+
+	return dataPoints;
+}
+
+void *writeResultsToFile(double *output, int numOfPoints, int numOfFeatures, char *filename){
+	
+	FILE *file = fopen(filename, "w");
+	int i, j;	
+	
+	if(file == NULL){
+		printf("Unable to open file: %s", filename);
+		return NULL;
+	}
+
+	printf("Writing output data to file: %s:\nnumber of data points: %d\nnumber of features: %d\n", filename, numOfPoints, numOfFeatures);
+    for(i=0; i < numOfPoints; i++) {
+		for(j = 0; j < numOfFeatures; j++){
+			if(j < numOfFeatures - 1) fprintf(file, "%lf,", output[i * numOfFeatures + j]);
+			else fprintf(file, "%lf", output[i * numOfFeatures + j]);
+		}
+		fprintf(file, "\n\0");
+        
+    }
+
+	fclose(file);
+
+	//if not null not returned, then it is pointer to output meaning success.
+	return output;
+}
+
 typedef struct {
     double value;  // Distance
     int index;     // Index of the training point
@@ -20,12 +207,6 @@ int compare(const void *a, const void *b) {
     else return 0;
 }
 
-ValueIndexPair *pre_alloc_distances;
-
-int readNumOfPoints(char*);
-int readNumOfFeatures(char*);
-double *readDataPoints(char*, int, int);
-void *writeResultsToFile(double*, int, int, char*);
 // Swap helper function
 void swap(ValueIndexPair* a, ValueIndexPair* b) {
     ValueIndexPair temp = *a;
@@ -67,106 +248,6 @@ void partial_sort(ValueIndexPair arr[], int n, int k) {
     quickselect(arr, 0, n - 1, k);  // Rearrange the first k elements to be the smallest
     qsort(arr, k, sizeof(ValueIndexPair), compare);  // Sort only the k smallest elements
 }
-/*Gets the number of the coordinates in the file. Returns as a single integer*/
-int readNumOfPoints(char *filename){
-	FILE *file = fopen(filename, "r");
-	int numOfPoints = 0;
-
-	if(file == NULL){
-		return -1;
-	}
-
-	char line[1000];
-
-	while(fgets(line, sizeof(line), file) != NULL){
-		numOfPoints++;
-	}
-
-	fclose(file);
-	return numOfPoints;
-}
-
-int readNumOfFeatures(char *filename){
-	FILE *file = fopen(filename, "r");
-
-	if(file == NULL){
-		return -1;
-	}
-
-	char line[1000];
-	char *p;
-
-	if(fgets(line, sizeof(line), file) != NULL){
-		int numOfFeatures = 1;
-
-		for(p = line; *p != '\0'; p++){
-			if(*p == ','){
-				numOfFeatures++;
-			}
-		}
-
-		fclose(file);
-		return numOfFeatures;
-	}
-
-	fclose(file);
-	return -1;
-}
-
-double *readDataPoints(char *filename, int numOfPoints, int numOfFeatures){
-	FILE *file = fopen(filename,"r");
-	char line[1000];
-    
-    if(file == NULL) {
-        printf("Unable to open file: %s\n", filename);
-        return NULL;
-    }
-
-	double *dataPoints = (double *)malloc(numOfPoints * numOfFeatures * sizeof(double));
-	if(dataPoints == NULL){
-		return NULL;
-	}
-
-	int lineNum = 0, featureIndex;
-
-	while(fgets(line, sizeof(line), file) != NULL && lineNum < numOfPoints){
-		char* token = strtok(line, ",");
-		featureIndex = 0;
-
-		while(token != NULL && featureIndex < numOfFeatures){
-			dataPoints[lineNum * numOfFeatures + featureIndex] = atof(token);
-			token = strtok(NULL, ",");
-			featureIndex++;
-		}
-
-		lineNum++;
-	}
-
-	fclose(file);
-	return dataPoints;
-}
-
-void *writeResultsToFile(double *output, int numOfPoints, int numOfFeatures, char *filename){
-	FILE *file = fopen(filename, "w");
-	int i, j;
-
-	if(file == NULL){
-		printf("Unable to open file: %s", filename);
-		return NULL;
-	}
-
-	for(i = 0; i < numOfPoints; i++) {
-		for(j = 0; j < numOfFeatures; j++){
-			if(j < numOfFeatures - 1) fprintf(file, "%lf,", output[i * numOfFeatures + j]);
-			else fprintf(file, "%lf", output[i * numOfFeatures + j]);
-		}
-		fprintf(file, "\n");
-	}
-
-	fclose(file);
-	return output;
-}
-
 
 double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k) {
     int classCount[100] = {0};  // Assuming class labels are between 0 and 99
@@ -192,40 +273,50 @@ double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k) {
     return most_frequent_class;
 }
 
-void processChunk(double *train_data, double *test_data, int train_rows, int test_rows, int train_cols, int test_cols, double *point_distances, int k, int chunk_start, int chunk_size) {
-    ValueIndexPair *distances = pre_alloc_distances;
+void processChunk(double *train_data, double *test_data, int train_rows, int test_rows, int train_cols, int test_cols, int k, int chunk_start, int chunk_size) {
+    ValueIndexPair *distances = (ValueIndexPair*) malloc(train_rows * sizeof(ValueIndexPair));  // Local buffer for each thread
 
     for (int i = chunk_start; i < chunk_start + chunk_size && i < test_rows; i++) {
         for (int j = 0; j < train_rows; j++) {
             double dist = 0.0;
-            // Vectorized distance calculation (example with SIMD, depends on your CPU)
             __m256d v_sum = _mm256_setzero_pd();
-            for (int d = 0; d < test_cols - 1; d += 4) {
+
+            int d = 0;
+            // Vectorized distance calculation for 4 dimensions at a time
+            for (; d <= test_cols - 5; d += 4) {
                 __m256d v_test = _mm256_loadu_pd(&test_data[i * test_cols + d]);
                 __m256d v_train = _mm256_loadu_pd(&train_data[j * train_cols + d]);
                 __m256d v_diff = _mm256_sub_pd(v_test, v_train);
                 v_sum = _mm256_add_pd(v_sum, _mm256_mul_pd(v_diff, v_diff));
             }
-            dist = v_sum[0] + v_sum[1] + v_sum[2] + v_sum[3];  // Sum the vector components
 
-            // Store distance and class info
+            // Sum the vector components
+            dist = v_sum[0] + v_sum[1] + v_sum[2] + v_sum[3];
+
+            // Handle the remaining dimensions (if any)
+            for (; d < test_cols - 1; d++) {
+                double diff = test_data[i * test_cols + d] - train_data[j * train_cols + d];
+                dist += diff * diff;
+            }
+
             distances[j].value = dist;
             distances[j].index = j;
             distances[j].class = train_data[j * train_cols + (train_cols - 1)];
         }
 
         // Partial sort (for k-nearest neighbors)
-        partial_sort(distances, train_rows, k);  // Replace qsort with partial sort
+        partial_sort(distances, train_rows, k);
 
         // Assign the most frequent class with tie-breaking
         test_data[i * test_cols + (test_cols - 1)] = findMostFrequentWithTieBreak(distances, k);
     }
+
+    free(distances);  // Free local buffer
 }
 
-int main(int argc, char *argv[]){
+int main(int argc, char *argv[]) {
+    clock_t time = clock();
 
-
-	clock_t time = clock();
     int train_rows = readNumOfPoints(argv[1]);
     int train_cols = readNumOfFeatures(argv[1]);
     double *train_data = readDataPoints(argv[1], train_rows, train_cols);
@@ -235,32 +326,24 @@ int main(int argc, char *argv[]){
     double *test_data = readDataPoints(argv[2], test_rows, test_cols);
 
     char *outfile = argv[3];
-	int k = atoi(argv[4]);
-    pre_alloc_distances = (ValueIndexPair*) malloc(train_rows * sizeof(ValueIndexPair));
+    int k = atoi(argv[4]);
 
-	// Chunk processing
-	int chunk_size = CHUNK_SIZE;
-	double *point_distances = malloc(chunk_size * train_rows * sizeof(double));
+    // Chunk processing
+    int chunk_size = CHUNK_SIZE;
 
-	if (point_distances == NULL) {
-		printf("Memory allocation failed for point_distances\n");
-		exit(1);
-	}
-	#pragma omp parallel for schedule(dynamic)
-	for (int chunk_start = 0; chunk_start < test_rows; chunk_start += chunk_size) {
-		int current_chunk_size = (chunk_start + chunk_size > test_rows) ? (test_rows - chunk_start) : chunk_size;
-		processChunk(train_data, test_data, train_rows, test_rows, train_cols, test_cols, point_distances, k, chunk_start, current_chunk_size);
-	}
+    #pragma omp parallel for schedule(dynamic)
+    for (int chunk_start = 0; chunk_start < test_rows; chunk_start += chunk_size) {
+        int current_chunk_size = (chunk_start + chunk_size > test_rows) ? (test_rows - chunk_start) : chunk_size;
+        processChunk(train_data, test_data, train_rows, test_rows, train_cols, test_cols, k, chunk_start, current_chunk_size);
+    }
 
-	writeResultsToFile(test_data, test_rows, test_cols, outfile);
+    writeResultsToFile(test_data, test_rows, test_cols, outfile);
 
-	free(point_distances);
-	free(train_data);
-	free(test_data);
-    free(pre_alloc_distances);
+    free(train_data);
+    free(test_data);
 
-	time = (clock() - time);
-	printf("Total time: %f seconds\n", (float)time / CLOCKS_PER_SEC);
+    time = (clock() - time);
+    printf("Total time: %f seconds\n", (float)time / CLOCKS_PER_SEC);
 
-	return 0;
+    return 0;
 }

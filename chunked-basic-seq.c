@@ -125,41 +125,30 @@ int compare(const void *a, const void *b) {
     else return 0;
 }
 
-// Function to find the most frequent class with tie-breaking based on distance of tied classes
+// Function to find the most frequent class with tie-breaking based on distance
 double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k, int test_index) {
     int classCount[100] = {0};  // Assuming max 100 classes
+    double most_frequent = arr[0].class; 
     int max_count = 0;
-    double most_frequent = arr[0].class;
-    bool tie_occurred = false;
-    double closest_distance = arr[0].value;
+    double closest_distance = arr[0].value;  // Track the closest distance
 
-    // Step 1: Count occurrences of each class in the k-nearest neighbors
     for (int i = 0; i < k; i++) {
         classCount[(int)arr[i].class]++;
-        if (classCount[(int)arr[i].class] > max_count) {
-            max_count = classCount[(int)arr[i].class];
-            most_frequent = arr[i].class;
-            closest_distance = arr[i].value;
-            tie_occurred = false;
-        } else if (classCount[(int)arr[i].class] == max_count) {
-            tie_occurred = true;
-        }
     }
 
-    // Step 2: If a tie occurred, check the closest point within the tied classes
-    if (tie_occurred) {
-        double tied_class = -1;
-        double tied_closest_distance = INFINITY;
-
-        // Find the closest point among the tied classes
-        for (int i = 0; i < k; i++) {
-            if (classCount[(int)arr[i].class] == max_count && arr[i].value < tied_closest_distance) {
-                tied_class = arr[i].class;
-                tied_closest_distance = arr[i].value;
+    for (int i = 0; i < k; i++) {
+        int count = classCount[(int)arr[i].class];
+        if (count > max_count) {
+            max_count = count;
+            most_frequent = arr[i].class;
+            closest_distance = arr[i].value;  // Reset to the closest for new max
+        } else if (count == max_count) {
+            // Tie-breaking logic: choose the class of the closest distance
+            if (arr[i].value < closest_distance) {
+                most_frequent = arr[i].class;
+                closest_distance = arr[i].value;  // Update to the closest distance
             }
         }
-
-        return tied_class;
     }
 
     return most_frequent;
@@ -192,10 +181,7 @@ void processChunk(double *train_data, double *test_data, int train_rows, int tes
 }
 
 int main(int argc, char *argv[]){
-	if (argc < 5) {
-		printf("Usage: %s <train_file> <test_file> <output_file> <k>\n", argv[0]);
-		exit(1);
-	}
+
 
 	clock_t time = clock();
     int train_rows = readNumOfPoints(argv[1]);
@@ -223,14 +209,14 @@ int main(int argc, char *argv[]){
 		processChunk(train_data, test_data, train_rows, test_rows, train_cols, test_cols, point_distances, k, chunk_start, current_chunk_size);
 	}
 
-	// Write the results to the output file
 	writeResultsToFile(test_data, test_rows, test_cols, outfile);
 
+	free(point_distances);
 	free(train_data);
 	free(test_data);
-	free(point_distances);
 
-	time = clock() - time;
-	printf("Time taken: %lf seconds\n", ((double)time) / CLOCKS_PER_SEC);
+	time = (clock() - time);
+	printf("Total time: %f seconds\n", (float)time / CLOCKS_PER_SEC);
+
 	return 0;
 }

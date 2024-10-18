@@ -218,7 +218,7 @@ void processChunk(double *train_data, double *test_data, int train_rows, int tes
         partial_sort(distances, train_rows, k);  // Replace qsort with partial sort
 
         // Assign the most frequent class with tie-breaking
-        test_data[i * test_cols + (test_cols - 1)] = findMostFrequentWithTieBreak(distances, k, i);
+        test_data[i * test_cols + (test_cols - 1)] = findMostFrequentWithTieBreak(distances, k);
     }
 }
 

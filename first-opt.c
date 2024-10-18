@@ -53,7 +53,7 @@ void quickselect(ValueIndexPair arr[], int left, int right, int k) {
     if (left < right) {
         int pivotIndex = partition(arr, left, right);
         if (pivotIndex == k) {
-            return;  // Found k-th element
+            return;  // Found the k-th element
         } else if (pivotIndex > k) {
             quickselect(arr, left, pivotIndex - 1, k);
         } else {
@@ -62,12 +62,11 @@ void quickselect(ValueIndexPair arr[], int left, int right, int k) {
     }
 }
 
-// Partial sort to get the top-k smallest elements
+// Partial sort to get the k smallest elements, followed by sorting those k elements
 void partial_sort(ValueIndexPair arr[], int n, int k) {
     quickselect(arr, 0, n - 1, k);  // Rearrange the first k elements to be the smallest
     qsort(arr, k, sizeof(ValueIndexPair), compare);  // Sort only the k smallest elements
 }
-
 /*Gets the number of the coordinates in the file. Returns as a single integer*/
 int readNumOfPoints(char *filename){
 	FILE *file = fopen(filename, "r");
@@ -169,26 +168,26 @@ void *writeResultsToFile(double *output, int numOfPoints, int numOfFeatures, cha
 }
 
 
-
-// Function to find the most frequent class with tie-breaking based on distance
-double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k, int test_index) {
-    int classCount[99] = {0};  
+double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k) {
+    int classCount[100] = {0};  // Assuming class labels are between 0 and 99
     int max_count = 0;
     double most_frequent_class = arr[0].class;
-    bool tie_occurred = false;
+    int tie_occurred = 0;
+
     for (int i = 0; i < k; i++) {
         classCount[(int)arr[i].class]++;
         if (classCount[(int)arr[i].class] > max_count) {
             max_count = classCount[(int)arr[i].class];
             most_frequent_class = arr[i].class;
-            tie_occurred = false;  // Clear tie if a class has more occurrences
+            tie_occurred = 0;
         } else if (classCount[(int)arr[i].class] == max_count) {
-            tie_occurred = true;  // A tie occurs if two or more classes have the same count
+            tie_occurred = 1;  // Indicate a tie occurred
         }
     }
 
+    // If a tie occurs, we choose the class of the closest point (first one in the array after sorting)
     if (tie_occurred) {
-        return arr[0].class;  // Return the class of the closest point
+        return arr[0].class;
     }
     return most_frequent_class;
 }

@@ -127,31 +127,25 @@ int compare(const void *a, const void *b) {
 
 // Function to find the most frequent class with tie-breaking based on distance
 double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k, int test_index) {
-    int classCount[100] = {0};  // Assuming max 100 classes
-    double most_frequent = arr[0].class; 
+    int classCount[99] = {0};  
     int max_count = 0;
-    double closest_distance = arr[0].value;  // Track the closest distance
-
+    double most_frequent_class = arr[0].class;
+    bool tie_occurred = false;
     for (int i = 0; i < k; i++) {
         classCount[(int)arr[i].class]++;
-    }
-
-    for (int i = 0; i < k; i++) {
-        int count = classCount[(int)arr[i].class];
-        if (count > max_count) {
-            max_count = count;
-            most_frequent = arr[i].class;
-            closest_distance = arr[i].value;  // Reset to the closest for new max
-        } else if (count == max_count) {
-            // Tie-breaking logic: choose the class of the closest distance
-            if (arr[i].value < closest_distance) {
-                most_frequent = arr[i].class;
-                closest_distance = arr[i].value;  // Update to the closest distance
-            }
+        if (classCount[(int)arr[i].class] > max_count) {
+            max_count = classCount[(int)arr[i].class];
+            most_frequent_class = arr[i].class;
+            tie_occurred = false;  // Clear tie if a class has more occurrences
+        } else if (classCount[(int)arr[i].class] == max_count) {
+            tie_occurred = true;  // A tie occurs if two or more classes have the same count
         }
     }
 
-    return most_frequent;
+    if (tie_occurred) {
+        return arr[0].class;  // Return the class of the closest point
+    }
+    return most_frequent_class;
 }
 
 void processChunk(double *train_data, double *test_data, int train_rows, int test_rows, int train_cols, int test_cols, double *point_distances, int k, int chunk_start, int chunk_size) {

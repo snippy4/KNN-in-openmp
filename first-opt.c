@@ -7,7 +7,7 @@
 #include <omp.h>
 #include <immintrin.h> 
 
-#define CHUNK_SIZE 10000  // Define chunk size to process large datasets
+#define CHUNK_SIZE 1000  // Define chunk size to process large datasets
 #include<stdio.h>
 #include<stdlib.h>
 #include<math.h>

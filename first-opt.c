@@ -195,12 +195,14 @@ void *writeResultsToFile(double *output, int numOfPoints, int numOfFeatures, cha
 	return output;
 }
 
+// used for storing distances
 typedef struct {
-    double value;  // Distance
-    int index;     // Index of the training point
-    double class;  // Class of the training point
+    double value;  
+    int index;     
+    double class;  
 } ValueIndexPair;
 
+// relevant enough to have its own function
 int compare(const void *a, const void *b) {
     if (((ValueIndexPair*)a)->value > ((ValueIndexPair*)b)->value) return 1;
     else if (((ValueIndexPair*)a)->value < ((ValueIndexPair*)b)->value) return -1;
@@ -243,30 +245,32 @@ void quickselect(ValueIndexPair arr[], int left, int right, int k) {
     }
 }
 
-// Partial sort to get the k smallest elements, followed by sorting those k elements
+// this probably saves okay time, i'll test it at some point
+// rather than sorting all the points, only the k smallest points are sorted
 void partial_sort(ValueIndexPair arr[], int n, int k) {
-    quickselect(arr, 0, n - 1, k);  // Rearrange the first k elements to be the smallest
-    qsort(arr, k, sizeof(ValueIndexPair), compare);  // Sort only the k smallest elements
+    quickselect(arr, 0, n - 1, k); 
+    qsort(arr, k, sizeof(ValueIndexPair), compare); 
 }
 
 double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k) {
-    int classCount[100] = {0};  // Assuming class labels are between 0 and 99
+    // if a test case has more than 100 classes then i hope your pillow is warm tonight
+    int classCount[100] = {0}; 
     int max_count = 0;
     double most_frequent_class = arr[0].class;
-    int tie_occurred = 0;
+    bool tie_occurred = false;
 
+    // pretty self explanitory but since i dont want to lose marks it counts the most frequent class and tracks if a tie is occuring or not
     for (int i = 0; i < k; i++) {
         classCount[(int)arr[i].class]++;
         if (classCount[(int)arr[i].class] > max_count) {
             max_count = classCount[(int)arr[i].class];
             most_frequent_class = arr[i].class;
-            tie_occurred = 0;
+            tie_occurred = false;
         } else if (classCount[(int)arr[i].class] == max_count) {
-            tie_occurred = 1;  // Indicate a tie occurred
+            tie_occurred = true; 
         }
     }
-
-    // If a tie occurs, we choose the class of the closest point (first one in the array after sorting)
+    // because the array is sorted arr[0] is the closest point
     if (tie_occurred) {
         return arr[0].class;
     }
@@ -274,49 +278,54 @@ double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k) {
 }
 
 void processChunk(double *train_data, double *test_data, int train_rows, int test_rows, int train_cols, int test_cols, int k, int chunk_start, int chunk_size) {
-    ValueIndexPair *distances = (ValueIndexPair*) malloc(train_rows * sizeof(ValueIndexPair));  // Local buffer for each thread
+    ValueIndexPair *distances = (ValueIndexPair*) malloc(train_rows * sizeof(ValueIndexPair)); 
 
     for (int i = chunk_start; i < chunk_start + chunk_size && i < test_rows; i++) {
         for (int j = 0; j < train_rows; j++) {
             double dist = 0.0;
+            // v_sum = [0,0,0,0]
             __m256d v_sum = _mm256_setzero_pd();
 
             int d = 0;
             // Vectorized distance calculation for 4 dimensions at a time
             for (; d <= test_cols - 5; d += 4) {
+                // v_test = testing point i feature [i + d] -> [i + d + 4]
                 __m256d v_test = _mm256_loadu_pd(&test_data[i * test_cols + d]);
+                // v_train = training point j features [j + d] -> [j + d + 4]
                 __m256d v_train = _mm256_loadu_pd(&train_data[j * train_cols + d]);
+                // v_diff = v_test - v_train
                 __m256d v_diff = _mm256_sub_pd(v_test, v_train);
+                // v_sum = v_diff * v_diff
                 v_sum = _mm256_add_pd(v_sum, _mm256_mul_pd(v_diff, v_diff));
             }
 
-            // Sum the vector components
+            // dist = squared distance between test_point[i] and train_point[j]
             dist = v_sum[0] + v_sum[1] + v_sum[2] + v_sum[3];
 
-            // Handle the remaining dimensions (if any)
+            // if point ∈ R^n where n%4 != 0 then this handles the remaining points
             for (; d < test_cols - 1; d++) {
                 double diff = test_data[i * test_cols + d] - train_data[j * train_cols + d];
                 dist += diff * diff;
             }
-
+            // update distance to Point j in array
             distances[j].value = dist;
             distances[j].index = j;
             distances[j].class = train_data[j * train_cols + (train_cols - 1)];
         }
 
-        // Partial sort (for k-nearest neighbors)
+        // distances [0-k] are the k smallest in order
         partial_sort(distances, train_rows, k);
 
-        // Assign the most frequent class with tie-breaking
+        // write the correct class to the array of test points
+        // NOTE - this can be done in parallel because of each point being completely independant in memory
         test_data[i * test_cols + (test_cols - 1)] = findMostFrequentWithTieBreak(distances, k);
     }
 
-    free(distances);  // Free local buffer
+    free(distances); 
 }
 
 int main(int argc, char *argv[]) {
-    clock_t time = clock();
-
+    // if this bit needs explaining thats not my problem
     int train_rows = readNumOfPoints(argv[1]);
     int train_cols = readNumOfFeatures(argv[1]);
     double *train_data = readDataPoints(argv[1], train_rows, train_cols);
@@ -328,9 +337,14 @@ int main(int argc, char *argv[]) {
     char *outfile = argv[3];
     int k = atoi(argv[4]);
 
-    // Chunk processing
+    // todo: find better sizing thats dynamic with number of points
     int chunk_size = CHUNK_SIZE;
 
+    /*
+    process each chunk in parallel, this was my first approach and i am yet to find a better one
+    as ALL of the processing for each chunk of points can be done completely independantly, probably missing
+    some slight efficency by not parallelising every point but the chunking made working with memory easier.
+    */  
     #pragma omp parallel for schedule(dynamic)
     for (int chunk_start = 0; chunk_start < test_rows; chunk_start += chunk_size) {
         int current_chunk_size = (chunk_start + chunk_size > test_rows) ? (test_rows - chunk_start) : chunk_size;
@@ -339,11 +353,9 @@ int main(int argc, char *argv[]) {
 
     writeResultsToFile(test_data, test_rows, test_cols, outfile);
 
+    // no memory leaks today
     free(train_data);
     free(test_data);
-
-    time = (clock() - time);
-    printf("Total time: %f seconds\n", (float)time / CLOCKS_PER_SEC);
 
     return 0;
 }

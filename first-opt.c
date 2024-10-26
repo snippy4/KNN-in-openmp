@@ -200,24 +200,24 @@ typedef struct {
     double value;  
     int index;     
     double class;  
-} ValueIndexPair;
+} PointDistance;
 
 // relevant enough to have its own function
 int compare(const void *a, const void *b) {
-    if (((ValueIndexPair*)a)->value > ((ValueIndexPair*)b)->value) return 1;
-    else if (((ValueIndexPair*)a)->value < ((ValueIndexPair*)b)->value) return -1;
+    if (((PointDistance*)a)->value > ((PointDistance*)b)->value) return 1;
+    else if (((PointDistance*)a)->value < ((PointDistance*)b)->value) return -1;
     else return 0;
 }
 
 // Swap helper function
-void swap(ValueIndexPair* a, ValueIndexPair* b) {
-    ValueIndexPair temp = *a;
+void swap(PointDistance* a, PointDistance* b) {
+    PointDistance temp = *a;
     *a = *b;
     *b = temp;
 }
 
 // Partition function for Quickselect
-int partition(ValueIndexPair arr[], int left, int right) {
+int partition(PointDistance arr[], int left, int right) {
     double pivot = arr[right].value;
     int i = left;
 
@@ -232,7 +232,7 @@ int partition(ValueIndexPair arr[], int left, int right) {
 }
 
 // Quickselect function to find k-th smallest element
-void quickselect(ValueIndexPair arr[], int left, int right, int k) {
+void quickselect(PointDistance arr[], int left, int right, int k) {
     if (left < right) {
         int pivotIndex = partition(arr, left, right);
         if (pivotIndex == k) {
@@ -247,12 +247,12 @@ void quickselect(ValueIndexPair arr[], int left, int right, int k) {
 
 // this probably saves okay time, i'll test it at some point
 // rather than sorting all the points, only the k smallest points are sorted
-void partial_sort(ValueIndexPair arr[], int n, int k) {
+void partial_sort(PointDistance arr[], int n, int k) {
     quickselect(arr, 0, n - 1, k); 
-    qsort(arr, k, sizeof(ValueIndexPair), compare); 
+    qsort(arr, k, sizeof(PointDistance), compare); 
 }
 
-double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k) {
+double findMostFrequentWithTieBreak(PointDistance arr[], int k) {
     // if a test case has more than 100 classes then i hope your pillow is warm tonight
     int classCount[100] = {0}; 
     int max_count = 0;
@@ -278,7 +278,7 @@ double findMostFrequentWithTieBreak(ValueIndexPair arr[], int k) {
 }
 
 void processChunk(double *train_data, double *test_data, int train_rows, int test_rows, int train_cols, int test_cols, int k, int chunk_start, int chunk_size) {
-    ValueIndexPair *distances = (ValueIndexPair*) malloc(train_rows * sizeof(ValueIndexPair)); 
+    PointDistance *distances = (PointDistance*) malloc(train_rows * sizeof(PointDistance)); 
 
     for (int i = chunk_start; i < chunk_start + chunk_size && i < test_rows; i++) {
         for (int j = 0; j < train_rows; j++) {

@@ -7,7 +7,7 @@
 #include <omp.h>
 #include <immintrin.h> 
 
-#define CHUNK_SIZE 1000  // Define chunk size to process large datasets
+#define CHUNK_SIZE 100  // Define chunk size to process large datasets
 #include<stdio.h>
 #include<stdlib.h>
 #include<math.h>
@@ -210,14 +210,14 @@ int compare(const void *a, const void *b) {
 }
 
 // Swap helper function
-void swap(PointDistance* a, PointDistance* b) {
+inline void swap(PointDistance* a, PointDistance* b) {
     PointDistance temp = *a;
     *a = *b;
     *b = temp;
 }
 
 // Partition function for Quickselect
-int partition(PointDistance arr[], int left, int right) {
+inline int partition(PointDistance arr[], int left, int right) {
     double pivot = arr[right].value;
     int i = left;
 

@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <omp.h>
 #include <immintrin.h> 
+#include <mpi.h>
 
 #define CHUNK_SIZE 100  // Define chunk size to process large datasets
 #include<stdio.h>
@@ -216,46 +217,40 @@ void swap(PointDistance* a, PointDistance* b) {
     *b = temp;
 }
 
-// Function to create a max heap with k smallest elements
-void maxHeapify(PointDistance arr[], int n, int i) {
-    int largest = i;          // Initialize largest as root
-    int left = 2 * i + 1;     // Left child
-    int right = 2 * i + 2;    // Right child
+// Partition function for Quickselect
+int partition(PointDistance arr[], int left, int right) {
+    double pivot = arr[right].value;
+    int i = left;
 
-    if (left < n && arr[left].value > arr[largest].value) {
-        largest = left;
-    }
-
-    if (right < n && arr[right].value > arr[largest].value) {
-        largest = right;
-    }
-
-    if (largest != i) {
-        swap(&arr[i], &arr[largest]);
-        maxHeapify(arr, n, largest);
-    }
-}
-
-// Build a max-heap with the first k elements
-void buildMaxHeap(PointDistance arr[], int k) {
-    for (int i = (k / 2) - 1; i >= 0; i--) {
-        maxHeapify(arr, k, i);
-    }
-}
-
-// Function to find k smallest elements using a max-heap of size k
-void findKSmallestElements(PointDistance arr[], int n, int k) {
-    // Step 1: Build a max-heap with the first k elements
-    buildMaxHeap(arr, k);
-
-    // Step 2: Process the remaining elements
-    for (int i = k; i < n; i++) {
-        if (arr[i].value < arr[0].value) {
-            // Replace the root (maximum element) with the current element and re-heapify
-            arr[0] = arr[i];
-            maxHeapify(arr, k, 0);
+    for (int j = left; j < right; j++) {
+        if (arr[j].value < pivot) {
+            swap(&arr[i], &arr[j]);
+            i++;
         }
     }
+    swap(&arr[i], &arr[right]);
+    return i;
+}
+
+// Quickselect function to find k-th smallest element
+void quickselect(PointDistance arr[], int left, int right, int k) {
+    if (left < right) {
+        int pivotIndex = partition(arr, left, right);
+        if (pivotIndex == k) {
+            return;  // Found the k-th element
+        } else if (pivotIndex > k) {
+            quickselect(arr, left, pivotIndex - 1, k);
+        } else {
+            quickselect(arr, pivotIndex + 1, right, k);
+        }
+    }
+}
+
+// this probably saves okay time, i'll test it at some point
+// rather than sorting all the points, only the k smallest points are sorted
+void partial_sort(PointDistance arr[], int n, int k) {
+    quickselect(arr, 0, n - 1, k); 
+    qsort(arr, k, sizeof(PointDistance), compare); 
 }
 
 double findMostFrequentWithTieBreak(PointDistance arr[], int k) {
@@ -320,8 +315,7 @@ void processChunk(double *train_data, double *test_data, int train_rows, int tes
         }
 
         // distances [0-k] are the k smallest in order
-        findKSmallestElements(distances, train_rows, k);
-        qsort(distances, k, sizeof(PointDistance), compare);
+        partial_sort(distances, train_rows, k);
 
         // write the correct class to the array of test points
         // NOTE - this can be done in parallel because of each point being completely independant in memory
@@ -332,38 +326,68 @@ void processChunk(double *train_data, double *test_data, int train_rows, int tes
 }
 
 int main(int argc, char *argv[]) {
-    // if this bit needs explaining thats not my problem
-    int train_rows = readNumOfPoints(argv[1]);
-    int train_cols = readNumOfFeatures(argv[1]);
-    double *train_data = readDataPoints(argv[1], train_rows, train_cols);
+    // MPI Initialization
+    int rank, size;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    int test_rows = readNumOfPoints(argv[2]);
-    int test_cols = readNumOfFeatures(argv[2]);
-    double *test_data = readDataPoints(argv[2], test_rows, test_cols);
-
+    double *train_data = NULL;
+    double *test_data = NULL;
+    int train_rows = 0, train_cols = 0;
+    int test_rows = 0, test_cols = 0;
     char *outfile = argv[3];
     int k = atoi(argv[4]);
 
-    // todo: find better sizing thats dynamic with number of points
-    int chunk_size = CHUNK_SIZE;
+    if (rank == 0) {
+        // Root process reads the data
+        train_rows = readNumOfPoints(argv[1]);
+        train_cols = readNumOfFeatures(argv[1]);
+        train_data = readDataPoints(argv[1], train_rows, train_cols);
 
-    /*
-    process each chunk in parallel, this was my first approach and i am yet to find a better one
-    as ALL of the processing for each chunk of points can be done completely independantly, probably missing
-    some slight efficency by not parallelising every point but the chunking made working with memory easier.
-    */  
-    //#pragma omp parallel for schedule(dynamic)
-    for (int chunk_start = 0; chunk_start < test_rows; chunk_start += chunk_size) {
-        int current_chunk_size = (chunk_start + chunk_size > test_rows) ? (test_rows - chunk_start) : chunk_size;
-        processChunk(train_data, test_data, train_rows, test_rows, train_cols, test_cols, k, chunk_start, current_chunk_size);
+        test_rows = readNumOfPoints(argv[2]);
+        test_cols = readNumOfFeatures(argv[2]);
+        test_data = readDataPoints(argv[2], test_rows, test_cols);
     }
 
-    writeResultsToFile(test_data, test_rows, test_cols, outfile);
+    // Broadcast dimensions to all processes
+    MPI_Bcast(&train_rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&train_cols, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&test_rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&test_cols, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    // no memory leaks today
- 
-   free(train_data);
-    free(test_data);
+    // Allocate memory for each process' data
+    double *local_train_data = (double *)malloc(train_rows * train_cols * sizeof(double));
+    double *local_test_data = (double *)malloc(test_rows * test_cols * sizeof(double));
+
+    // Scatter the training data (still needed by all processes for distance calculation)
+    MPI_Bcast(train_data, train_rows * train_cols, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    // Scatter the test data (distribute the test points among the processes)
+    int chunk_size = (test_rows + size - 1) / size;  // Number of test points per process
+    MPI_Scatter(test_data, chunk_size * test_cols, MPI_DOUBLE, local_test_data, chunk_size * test_cols, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    // Parallel processing of test data
+    for (int chunk_start = 0; chunk_start < test_rows; chunk_start += chunk_size) {
+        int current_chunk_size = (chunk_start + chunk_size > test_rows) ? (test_rows - chunk_start) : chunk_size;
+        processChunk(local_train_data, local_test_data, train_rows, test_rows, train_cols, test_cols, k, chunk_start, current_chunk_size);
+    }
+
+    // Gather the processed test data back to root
+    MPI_Gather(local_test_data, chunk_size * test_cols, MPI_DOUBLE, test_data, chunk_size * test_cols, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    // Only root process writes results to file
+    printf("%s\n",outfile);
+    if (rank == 0) {
+        writeResultsToFile(test_data, test_rows, test_cols, outfile);
+    }
+
+    // Clean up
+    free(local_train_data);
+    free(local_test_data);
+
+    // Finalize MPI
+    MPI_Finalize();
 
     return 0;
 }

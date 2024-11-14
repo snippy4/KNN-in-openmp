@@ -1,18 +1,10 @@
-#include <stdio.h>
-#include <time.h>
-#include <stdlib.h>
-#include <math.h>
-#include <string.h>
-#include <stdbool.h>
-#include <omp.h>
-#include <immintrin.h> 
-
-#define CHUNK_SIZE 40  // Define chunk size to process large datasets
 #include<stdio.h>
 #include<stdlib.h>
 #include<math.h>
 #include<string.h>
 #include<stdbool.h>
+#include <float.h>
+#include <omp.h>
 
 /*This code is for reading and writing to files for the 2024-25 COMP528 CA1*/
 
@@ -195,37 +187,86 @@ void *writeResultsToFile(double *output, int numOfPoints, int numOfFeatures, cha
 	return output;
 }
 
-// used for storing distances
-typedef struct {
-    double value;  
-    int index;     
-    double class;  
-} PointDistance;
+int dimensions;
 
-// relevant enough to have its own function
-int compare(const void *a, const void *b) {
-    if (((PointDistance*)a)->value > ((PointDistance*)b)->value) return 1;
-    else if (((PointDistance*)a)->value < ((PointDistance*)b)->value) return -1;
-    else return 0;
+typedef struct Node{
+    double *point;
+    struct Node *left;
+    struct Node *right;
+    double class;
+}Node;
+
+Node* newnode(double *point, double class){
+    Node* new = (Node*)malloc(sizeof(Node));
+    new->point = (double*)malloc(dimensions * sizeof(double));
+    for (int i = 0; i < dimensions; i++){
+        new->point[i] = point[i];
+    }
+    new->class = class;
+    new->left = NULL;
+    new->right = NULL;
+    return new;
 }
 
-// Swap helper function
-void swap(PointDistance* a, PointDistance* b) {
-    PointDistance temp = *a;
+Node* insert(Node* root, double *point, double class, int depth){
+
+    if(root==NULL) return newnode(point, class);
+    else if(point[depth%dimensions] <= root->point[depth%dimensions]){
+        root->left = insert(root->left, point, class, (depth+1));
+    }
+    else{
+        root->right = insert(root->right, point, class, (depth+1));
+    }
+    return root;
+}
+//proof of concept function
+Node* findmin(Node* root, int dim, int depth){
+    if(root == NULL) return NULL;
+    if(depth % dimensions == dim){
+        if(root->left == NULL) return root;
+        else return findmin(root->left, dim, depth + 1);
+    }
+
+    else{
+        Node* left = findmin(root->left, dim, depth + 1);
+        Node* right = findmin(root->right, dim, depth + 1);
+        if (left == NULL) return right;
+        if (right == NULL) return left;
+        if (left->point[dim] <= right->point[dim]) return left;
+        else return right;
+    }
+}
+
+double distance(double *point1, double *point2, int size){
+    double dist = 0.0;
+
+    for(int i = 0; i<size; i++){
+        dist += (point1[i] - point2[i])*(point1[i] - point2[i]);
+    }
+    return dist;
+}
+
+typedef struct NodeDist{
+    Node* node;
+    double dist;
+}NodeDist;
+
+void swap(NodeDist* a, NodeDist* b) {
+    NodeDist temp = *a;
     *a = *b;
     *b = temp;
 }
 
-static inline void maxHeapify(PointDistance arr[], int n, int i) {
+static inline void maxHeapify(NodeDist arr[], int n, int i) {
     int largest = i;
     int left = 2 * i + 1;
     int right = 2 * i + 2;
 
     while (left < n) {
-        if (arr[left].value > arr[largest].value) {
+        if (arr[left].dist > arr[largest].dist) {
             largest = left;
         }
-        if (right < n && arr[right].value > arr[largest].value) {
+        if (right < n && arr[right].dist > arr[largest].dist) {
             largest = right;
         }
         if (largest != i) {
@@ -240,136 +281,133 @@ static inline void maxHeapify(PointDistance arr[], int n, int i) {
 }
 
 // Build a max-heap with the first k elements
-void buildMaxHeap(PointDistance arr[], int k) {
+void buildMaxHeap(NodeDist arr[], int k) {
     for (int i = (k / 2) - 1; i >= 0; i--) {
         maxHeapify(arr, k, i);
     }
 }
 
-// Function to find k smallest elements using a max-heap of size k
-void findKSmallestElements(PointDistance arr[], int n, int k) {
-    // Step 1: Build a max-heap with the first k elements
-    buildMaxHeap(arr, k);
-
-    // Step 2: Process the remaining elements
-    for (int i = k; i < n; i++) {
-        if (arr[i].value < arr[0].value) {
-            // Replace the root (maximum element) with the current element and re-heapify
-            arr[0] = arr[i];
-            maxHeapify(arr, k, 0);
-        }
-    }
-}
-
-double findMostFrequentWithTieBreak(PointDistance arr[], int k) {
+double findMostFrequentWithTieBreak(NodeDist arr[], int k) {
     // if a test case has more than 100 classes then i hope your pillow is warm tonight
     int classCount[100] = {0}; 
     int max_count = 0;
-    double most_frequent_class = arr[0].class;
+    double most_frequent_class = arr[0].node->class;
     bool tie_occurred = false;
 
     // pretty self explanitory but since i dont want to lose marks it counts the most frequent class and tracks if a tie is occuring or not
     for (int i = 0; i < k; i++) {
-        classCount[(int)arr[i].class]++;
-        if (classCount[(int)arr[i].class] > max_count) {
-            max_count = classCount[(int)arr[i].class];
-            most_frequent_class = arr[i].class;
+        //printPoint(arr[i].node->point);
+        //printf("dist: %lf class: %lf\n", arr[i].distance, arr[i].node->class);
+        classCount[(int)arr[i].node->class]++;
+        if (classCount[(int)arr[i].node->class] > max_count) {
+            max_count = classCount[(int)arr[i].node->class];
+            most_frequent_class = arr[i].node->class;
             tie_occurred = false;
-        } else if (classCount[(int)arr[i].class] == max_count) {
+        } else if (classCount[(int)arr[i].node->class] == max_count) {
             tie_occurred = true; 
         }
     }
     // because the array is sorted arr[0] is the closest point
     if (tie_occurred) {
-        qsort(arr, k, sizeof(PointDistance), compare);
-        return arr[0].class;
+        return arr[0].node->class;
     }
     return most_frequent_class;
 }
 
-void processChunk(double *train_data, double *test_data, int train_rows, int test_rows, int train_cols, int test_cols, int k, int chunk_start, int chunk_size) {
-    PointDistance *distances = (PointDistance*) malloc(train_rows * sizeof(PointDistance)); 
-    int end = (chunk_start + chunk_size > test_rows) ? test_rows : (chunk_start + chunk_size);
+void KNNSearch(Node* root, double* target, int k, int depth, NodeDist heap[]){
+    if (root == NULL) return;
 
-    for (int i = chunk_start; i < end; i++) {
-        for (int j = 0; j < train_rows; j++) {
-            __builtin_prefetch(&train_data[(j + 1) * train_cols], 0, 1);
-            double dist = 0.0;
-            // v_sum = [0,0,0,0]
-            __m256d v_sum = _mm256_setzero_pd();
+    double dist = distance(target, root->point, dimensions);
 
-            int d = 0;
-            // Vectorized distance calculation for 4 dimensions at a time
-            for (; d <= test_cols - 5; d += 4) {
-                // v_test = testing point i feature [i + d] -> [i + d + 4]
-                __m256d v_test = _mm256_loadu_pd(&test_data[i * test_cols + d]);
-                // v_train = training point j features [j + d] -> [j + d + 4]
-                __m256d v_train = _mm256_loadu_pd(&train_data[j * train_cols + d]);
-                // v_diff = v_test - v_train
-                __m256d v_diff = _mm256_sub_pd(v_test, v_train);
-                // v_sum = v_diff * v_diff
-                v_sum = _mm256_add_pd(v_sum, _mm256_mul_pd(v_diff, v_diff));
-            }
+    if(root->left == NULL && root->right == NULL){
+        if(dist<heap[0].dist){
+            NodeDist newnode;
+            newnode.dist = dist;
+            newnode.node = root;
+            heap[0] = newnode;
+            maxHeapify(heap, k, 0);
 
-            // dist = squared distance between test_point[i] and train_point[j]
-            dist = v_sum[0] + v_sum[1] + v_sum[2] + v_sum[3];
-
-            // if point ∈ R^n where n%4 != 0 then this handles the remaining points
-            for (; d < test_cols - 1; d++) {
-                double diff = test_data[i * test_cols + d] - train_data[j * train_cols + d];
-                dist += diff * diff;
-            }
-            // update distance to Point j in array
-            distances[j].value = dist;
-            distances[j].index = j;
-            distances[j].class = train_data[j * train_cols + (train_cols - 1)];
         }
-
-        // distances [0-k] are the k smallest in order
-        findKSmallestElements(distances, train_rows, k);
-
-
-        // write the correct class to the array of test points
-        // NOTE - this can be done in parallel because of each point being completely independant in memory
-        test_data[i * test_cols + (test_cols - 1)] = findMostFrequentWithTieBreak(distances, k);
+    }else {
+        int axis = depth % dimensions;
+        int dir = 0;
+        if (target[axis] < root->point[axis]){
+            KNNSearch(root->left, target, k, depth+1, heap);
+        }else{
+            KNNSearch(root->right, target, k, depth+1, heap);
+            dir = 1;
+        }
+        if(dist<heap[0].dist){
+            NodeDist newnode;
+            newnode.dist = dist;
+            newnode.node = root;
+            heap[0] = newnode;
+            maxHeapify(heap, k, 0);
+        }
+        if(distance(target, heap[0].node->point, dimensions) > target[axis] - root->point[axis]){
+            if(dir == 1){
+                KNNSearch(root->left, target, k, depth+1, heap);
+            }else{
+                KNNSearch(root->right, target, k, depth+1, heap);
+            }
+        }
     }
 
-    free(distances); 
+
 }
 
-int main(int argc, char *argv[]) {
+void KNN(Node* root, double* target, int k){
+    NodeDist heap[k];
+    // init heap
+    for(int i = 0; i<k; i++){
+        NodeDist next;
+        next.node = root;
+        next.dist = DBL_MAX;
+        heap[i] = next;
+    }
+    buildMaxHeap(heap, k);
+
+    KNNSearch(root, target, k, 0, heap);
+
+
+   target[dimensions] = findMostFrequentWithTieBreak(heap, k);
+
+        
+}
+
+// Sample main function
+int main(int argc, char *argv[]){
     // if this bit needs explaining thats not my problem
     int train_rows = readNumOfPoints(argv[1]);
     int train_cols = readNumOfFeatures(argv[1]);
     double *train_data = readDataPoints(argv[1], train_rows, train_cols);
-
     int test_rows = readNumOfPoints(argv[2]);
     int test_cols = readNumOfFeatures(argv[2]);
     double *test_data = readDataPoints(argv[2], test_rows, test_cols);
-
     char *outfile = argv[3];
     int k = atoi(argv[4]);
-
-    // todo: find better sizing thats dynamic with number of points
-    int chunk_size = CHUNK_SIZE;
-
-    /*
-    process each chunk in parallel, this was my first approach and i am yet to find a better one
-    as ALL of the processing for each chunk of points can be done completely independantly, probably missing
-    some slight efficency by not parallelising every point but the chunking made working with memory easier.
-    */  
-    #pragma omp parallel for schedule(dynamic)
-    for (int chunk_start = 0; chunk_start < test_rows; chunk_start += chunk_size) {
-        int current_chunk_size = (chunk_start + chunk_size > test_rows) ? (test_rows - chunk_start) : chunk_size;
-        processChunk(train_data, test_data, train_rows, test_rows, train_cols, test_cols, k, chunk_start, current_chunk_size);
+    dimensions = train_cols-1;   
+   
+    Node* root = NULL;
+    for (int i = 0; i < train_rows; i++) {
+        double* point = &train_data[i * train_cols];
+        root = insert(root, point, train_data[i * train_cols + dimensions], 0);   
     }
+    #pragma omp parallel for
+    for(int i = 0; i < test_rows; i++){
+        KNN(root, &test_data[i * test_cols], k);
+    }
+    /*
+    printf("finding min in dim 0\n");
+    Node* min = findmin(root, 1, 0);
+    for(int i = 0; i < dimensions; i++){
+        printf("%lf,", min->point[i]);
+    }
+    */
+
 
     writeResultsToFile(test_data, test_rows, test_cols, outfile);
 
-    // no memory leaks today
- 
-   free(train_data);
-    free(test_data);
 
     return 0;
 }

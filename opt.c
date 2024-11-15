@@ -344,7 +344,8 @@ void KNNSearch(Node* root, double* target, int k, int depth, NodeDist heap[]){
             heap[0] = newnode;
             maxHeapify(heap, k, 0);
         }
-        if(distance(target, heap[0].node->point, dimensions) > target[axis] - root->point[axis]){
+        //determine if branch is pruned
+        if(distance(target, heap[0].node->point, dimensions)*9 > target[axis] - root->point[axis]){
             if(dir == 1){
                 KNNSearch(root->left, target, k, depth+1, heap);
             }else{

@@ -209,13 +209,14 @@ int compare(const void *a, const void *b) {
     else return 0;
 }
 
-// Swap helper function
 void swap(PointDistance* a, PointDistance* b) {
     PointDistance temp = *a;
     *a = *b;
     *b = temp;
 }
 
+
+//online algorithm for inserting into max heap
 static inline void maxHeapify(PointDistance arr[], int n, int i) {
     int largest = i;
     int left = 2 * i + 1;
@@ -228,6 +229,7 @@ static inline void maxHeapify(PointDistance arr[], int n, int i) {
         if (right < n && arr[right].value > arr[largest].value) {
             largest = right;
         }
+        //if the largest element has changed then swap arr[i] and largest
         if (largest != i) {
             swap(&arr[i], &arr[largest]);
             i = largest;
@@ -239,22 +241,20 @@ static inline void maxHeapify(PointDistance arr[], int n, int i) {
     }
 }
 
-// Build a max-heap with the first k elements
+//arr[0..k] is entered into the heap
 void buildMaxHeap(PointDistance arr[], int k) {
     for (int i = (k / 2) - 1; i >= 0; i--) {
         maxHeapify(arr, k, i);
     }
 }
 
-// Function to find k smallest elements using a max-heap of size k
+// find k smallest
 void findKSmallestElements(PointDistance arr[], int n, int k) {
-    // Step 1: Build a max-heap with the first k elements
     buildMaxHeap(arr, k);
 
-    // Step 2: Process the remaining elements
+    //if given element is smaller than the largest element in the max heap then insert the new element into the heap
     for (int i = k; i < n; i++) {
         if (arr[i].value < arr[0].value) {
-            // Replace the root (maximum element) with the current element and re-heapify
             arr[0] = arr[i];
             maxHeapify(arr, k, 0);
         }
@@ -279,7 +279,7 @@ double findMostFrequentWithTieBreak(PointDistance arr[], int k) {
             tie_occurred = true; 
         }
     }
-    // because the array is sorted arr[0] is the closest point
+    // select the closest point
     if (tie_occurred) {
         qsort(arr, k, sizeof(PointDistance), compare);
         return arr[0].class;
@@ -358,7 +358,7 @@ int main(int argc, char *argv[]) {
     as ALL of the processing for each chunk of points can be done completely independantly, probably missing
     some slight efficency by not parallelising every point but the chunking made working with memory easier.
     */  
-    //#pragma omp parallel for schedule(dynamic)
+    #pragma omp parallel for schedule(dynamic)
     for (int chunk_start = 0; chunk_start < test_rows; chunk_start += chunk_size) {
         int current_chunk_size = (chunk_start + chunk_size > test_rows) ? (test_rows - chunk_start) : chunk_size;
         processChunk(train_data, test_data, train_rows, test_rows, train_cols, test_cols, k, chunk_start, current_chunk_size);

@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 
 # Sample data: replace these values with your actual recorded runtimes
 cores = [1, 2, 4, 8, 16, 32]  # Number of cores used in each test
-runtimes = [30.02 ,15.32, 9.25, 5.63, 4.44, 3.43]  # Corresponding runtimes for each core count
+runtimes = [26.95 ,13.88, 7.24, 4.09, 2.79, 1.75]  # Corresponding runtimes for each core count
 
 # Calculate the speedup (compared to single-core runtime)
 single_core_runtime = runtimes[0]

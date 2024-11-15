@@ -7,7 +7,7 @@
 #include <omp.h>
 #include <immintrin.h> 
 
-#define CHUNK_SIZE 100  // Define chunk size to process large datasets
+#define CHUNK_SIZE 40  // Define chunk size to process large datasets
 #include<stdio.h>
 #include<stdlib.h>
 #include<math.h>
@@ -210,47 +210,151 @@ int compare(const void *a, const void *b) {
 }
 
 // Swap helper function
-inline void swap(PointDistance* a, PointDistance* b) {
+void swap(PointDistance* a, PointDistance* b) {
     PointDistance temp = *a;
     *a = *b;
     *b = temp;
 }
 
-// Partition function for Quickselect
-inline int partition(PointDistance arr[], int left, int right) {
-    double pivot = arr[right].value;
-    int i = left;
+static inline void maxHeapify(PointDistance arr[], int n, int i) {
+    int largest = i;
+    int left = 2 * i + 1;
+    int right = 2 * i + 2;
 
-    for (int j = left; j < right; j++) {
-        if (arr[j].value < pivot) {
-            swap(&arr[i], &arr[j]);
-            i++;
+    while (left < n) {
+        if (arr[left].value > arr[largest].value) {
+            largest = left;
         }
-    }
-    swap(&arr[i], &arr[right]);
-    return i;
-}
-
-// Quickselect function to find k-th smallest element
-void quickselect(PointDistance arr[], int left, int right, int k) {
-    if (left < right) {
-        int pivotIndex = partition(arr, left, right);
-        if (pivotIndex == k) {
-            return;  // Found the k-th element
-        } else if (pivotIndex > k) {
-            quickselect(arr, left, pivotIndex - 1, k);
+        if (right < n && arr[right].value > arr[largest].value) {
+            largest = right;
+        }
+        if (largest != i) {
+            swap(&arr[i], &arr[largest]);
+            i = largest;
+            left = 2 * i + 1;
+            right = 2 * i + 2;
         } else {
-            quickselect(arr, pivotIndex + 1, right, k);
+            break;
         }
     }
 }
 
-// this probably saves okay time, i'll test it at some point
-// rather than sorting all the points, only the k smallest points are sorted
-void partial_sort(PointDistance arr[], int n, int k) {
-    quickselect(arr, 0, n - 1, k); 
-    qsort(arr, k, sizeof(PointDistance), compare); 
+// Build a max-heap with the first k elements
+void buildMaxHeap(PointDistance arr[], int k) {
+    for (int i = (k / 2) - 1; i >= 0; i--) {
+        maxHeapify(arr, k, i);
+    }
 }
+
+// Function to find k smallest elements using a max-heap of size k
+void findKSmallestElements(PointDistance arr[], int n, int k) {
+    // Step 1: Build a max-heap with the first k elements
+    buildMaxHeap(arr, k);
+
+    // Step 2: Process the remaining elements
+    for (int i = k; i < n; i++) {
+        if (arr[i].value < arr[0].value) {
+            // Replace the root (maximum element) with the current element and re-heapify
+            arr[0] = arr[i];
+            maxHeapify(arr, k, 0);
+        }
+    }
+}
+
+
+void SIMD_SORT(PointDistance* array, int N) {
+    const int K = 8; // Size of the smallest sorted sequence (adjustable for registers).
+    const int SIMD_WIDTH = 4; // Number of doubles in __m256d.
+
+    // Helper function: In-register sorting for chunks of size K.
+    void in_register_sort(PointDistance* subarray) {
+        __m256d v1, v2, temp;
+        double temp_values[8];
+
+        // Extract values into a temporary array for SIMD processing
+        for (int i = 0; i < K; ++i) {
+            temp_values[i] = subarray[i].value;
+        }
+
+        // Load elements into SIMD registers
+        v1 = _mm256_loadu_pd(temp_values);       // First 4 values
+        v2 = _mm256_loadu_pd(temp_values + 4);   // Next 4 values
+
+        // Perform bitonic sort or other in-register sorting
+        temp = _mm256_min_pd(v1, v2);
+        v2 = _mm256_max_pd(v1, v2);
+        v1 = temp;
+
+        // Store back sorted values
+        _mm256_storeu_pd(temp_values, v1);
+        _mm256_storeu_pd(temp_values + 4, v2);
+
+        // Update the original array with sorted values
+        for (int i = 0; i < K; ++i) {
+            subarray[i].value = temp_values[i];
+        }
+
+        // Perform sorting between registers (pairwise comparison and swap)
+        for (int i = 0; i < 3; ++i) {
+            if (subarray[i].value > subarray[i + 4].value) {
+                PointDistance temp_point = subarray[i];
+                subarray[i] = subarray[i + 4];
+                subarray[i + 4] = temp_point;
+            }
+        }
+    }
+
+    // Helper function: Merging two sequences of size len_a and len_b into a single sorted sequence
+    void simd_merge(PointDistance* a, int len_a, PointDistance* b, int len_b, PointDistance* out) {
+        int i = 0, j = 0, k = 0;
+
+        while (i < len_a && j < len_b) {
+            if (a[i].value <= b[j].value) {
+                out[k++] = a[i++];
+            } else {
+                out[k++] = b[j++];
+            }
+        }
+        while (i < len_a) out[k++] = a[i++];
+        while (j < len_b) out[k++] = b[j++];
+    }
+
+    // Sort each chunk of size M using the hierarchical merging process
+    int M = 2 * K; // Adjustable size of chunks for hierarchical sorting
+    for (int chunk_start = 0; chunk_start < N; chunk_start += M) {
+        int chunk_size = (chunk_start + M > N) ? (N - chunk_start) : M;
+
+        // In-register sort for each chunk
+        for (int i = chunk_start; i < chunk_start + chunk_size; i += K) {
+            in_register_sort(&array[i]);
+        }
+
+        // Perform multi-level merging within each chunk
+        for (int itr = log2(K); itr <= log2(M) - 3; ++itr) {
+            int step = 1 << itr; // 2^itr
+
+            for (int i = chunk_start; i + step < chunk_start + chunk_size; i += 2 * step) {
+                PointDistance* temp = (PointDistance*)malloc(2 * step * sizeof(PointDistance));
+                simd_merge(&array[i], step, &array[i + step], step, temp);
+                memcpy(&array[i], temp, 2 * step * sizeof(PointDistance));
+                free(temp);
+            }
+        }
+    }
+
+    // Global merging for all chunks
+    for (int itr = log2(M); itr <= log2(N) - 1; ++itr) {
+        int step = 1 << itr; // 2^itr
+
+        for (int i = 0; i + step < N; i += 2 * step) {
+            PointDistance* temp = (PointDistance*)malloc(2 * step * sizeof(PointDistance));
+            simd_merge(&array[i], step, &array[i + step], step, temp);
+            memcpy(&array[i], temp, 2 * step * sizeof(PointDistance));
+            free(temp);
+        }
+    }
+}
+
 
 double findMostFrequentWithTieBreak(PointDistance arr[], int k) {
     // if a test case has more than 100 classes then i hope your pillow is warm tonight
@@ -272,6 +376,7 @@ double findMostFrequentWithTieBreak(PointDistance arr[], int k) {
     }
     // because the array is sorted arr[0] is the closest point
     if (tie_occurred) {
+        qsort(arr, k, sizeof(PointDistance), compare);
         return arr[0].class;
     }
     return most_frequent_class;
@@ -279,9 +384,11 @@ double findMostFrequentWithTieBreak(PointDistance arr[], int k) {
 
 void processChunk(double *train_data, double *test_data, int train_rows, int test_rows, int train_cols, int test_cols, int k, int chunk_start, int chunk_size) {
     PointDistance *distances = (PointDistance*) malloc(train_rows * sizeof(PointDistance)); 
+    int end = (chunk_start + chunk_size > test_rows) ? test_rows : (chunk_start + chunk_size);
 
-    for (int i = chunk_start; i < chunk_start + chunk_size && i < test_rows; i++) {
+    for (int i = chunk_start; i < end; i++) {
         for (int j = 0; j < train_rows; j++) {
+            __builtin_prefetch(&train_data[(j + 1) * train_cols], 0, 1);
             double dist = 0.0;
             // v_sum = [0,0,0,0]
             __m256d v_sum = _mm256_setzero_pd();
@@ -314,7 +421,8 @@ void processChunk(double *train_data, double *test_data, int train_rows, int tes
         }
 
         // distances [0-k] are the k smallest in order
-        partial_sort(distances, train_rows, k);
+        findKSmallestElements(distances, train_rows, k);
+
 
         // write the correct class to the array of test points
         // NOTE - this can be done in parallel because of each point being completely independant in memory
@@ -354,7 +462,8 @@ int main(int argc, char *argv[]) {
     writeResultsToFile(test_data, test_rows, test_cols, outfile);
 
     // no memory leaks today
-    free(train_data);
+ 
+   free(train_data);
     free(test_data);
 
     return 0;

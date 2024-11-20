@@ -12,6 +12,8 @@ Different optimisation techniques were used in order to achieve the lowest possi
 | 16    | 2.27    |
 | 32    |  1.59   |
 
+benchmarks done using asteroids_train, asteroids_test with k value 3 running the knnomp version for exact K-Nearest Neighbours
+
 ### Prerequisites
 - gcc Compiler
 

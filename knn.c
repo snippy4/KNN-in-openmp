@@ -4,15 +4,10 @@
 #include <math.h>
 #include <string.h>
 #include <stdbool.h>
-#include <omp.h>
 #include <immintrin.h> 
+#include <file-reader.h>
 
 #define CHUNK_SIZE 40  // Define chunk size to process large datasets
-#include<stdio.h>
-#include<stdlib.h>
-#include<math.h>
-#include<string.h>
-#include<stdbool.h>
 
 /*This code is for reading and writing to files for the 2024-25 COMP528 CA1*/
 
@@ -288,18 +283,31 @@ double findMostFrequentWithTieBreak(PointDistance arr[], int k) {
 }
 
 void processChunk(double *train_data, double *test_data, int train_rows, int test_rows, int train_cols, int test_cols, int k, int chunk_start, int chunk_size) {
-    PointDistance *distances = (PointDistance*) malloc(train_rows * sizeof(PointDistance)); 
+    // create a max-heap of size k
+    PointDistance *distances = (PointDistance*) malloc(k * sizeof(PointDistance)); 
     int end = (chunk_start + chunk_size > test_rows) ? test_rows : (chunk_start + chunk_size);
 
     for (int i = chunk_start; i < end; i++) {
+        // initialize the heap
+        for (int n = 0; n < k; n++) {
+            distances[n].value = INFINITY; 
+        }
+
+        // calculate distances from the test point to each training point
         for (int j = 0; j < train_rows; j++) {
             __builtin_prefetch(&train_data[(j + 1) * train_cols], 0, 1);
+
+            // before calculating the full distance, check if pruning is possible
+            double current_max_dist = distances[0].value; 
             double dist = 0.0;
+            bool prune = false;
+           
+
             // v_sum = [0,0,0,0]
             __m256d v_sum = _mm256_setzero_pd();
-
             int d = 0;
-            // Vectorized distance calculation for 4 dimensions at a time
+
+            // vectorized distance calculation for 4 dimensions at a time
             for (; d <= test_cols - 5; d += 4) {
                 // v_test = testing point i feature [i + d] -> [i + d + 4]
                 __m256d v_test = _mm256_loadu_pd(&test_data[i * test_cols + d]);
@@ -309,28 +317,44 @@ void processChunk(double *train_data, double *test_data, int train_rows, int tes
                 __m256d v_diff = _mm256_sub_pd(v_test, v_train);
                 // v_sum = v_diff * v_diff
                 v_sum = _mm256_add_pd(v_sum, _mm256_mul_pd(v_diff, v_diff));
+            // prune the point if the current distance is larger than the current k-th closest point
+                if (v_sum[0] + v_sum[1] + v_sum[2] + v_sum[3] > current_max_dist) {
+                    prune=true;
+                    break; 
             }
-
+            }
+            if(prune){
+                continue;
+            }
             // dist = squared distance between test_point[i] and train_point[j]
             dist = v_sum[0] + v_sum[1] + v_sum[2] + v_sum[3];
 
-            // if point ∈ R^n where n%4 != 0 then this handles the remaining points
+            // If point ∈ R^n where n%4 != 0 then this handles the remaining points
             for (; d < test_cols - 1; d++) {
                 double diff = test_data[i * test_cols + d] - train_data[j * train_cols + d];
                 dist += diff * diff;
+                // prune the point if the current distance is larger than the current k-th closest point
+                if (dist > current_max_dist) {
+                    prune=true;
+                    break; 
             }
-            // update distance to Point j in array
-            distances[j].value = dist;
-            distances[j].index = j;
-            distances[j].class = train_data[j * train_cols + (train_cols - 1)];
+            }
+            if(prune){
+                continue;
+            }
+            
+            //insert point into heap if it is closer than the k-th closest
+            if (dist < current_max_dist) {
+                distances[0].value = dist;
+                distances[0].index = j;
+                distances[0].class = train_data[j * train_cols + (train_cols - 1)];
+
+                // heapify the heap to maintain the k smallest distances
+                maxHeapify(distances, k, 0);
+            }
         }
 
-        // distances [0-k] are the k smallest in order
-        findKSmallestElements(distances, train_rows, k);
-
-
-        // write the correct class to the array of test points
-        // NOTE - this can be done in parallel because of each point being completely independant in memory
+        // find the most frequent class
         test_data[i * test_cols + (test_cols - 1)] = findMostFrequentWithTieBreak(distances, k);
     }
 
@@ -358,7 +382,7 @@ int main(int argc, char *argv[]) {
     as ALL of the processing for each chunk of points can be done completely independantly, probably missing
     some slight efficency by not parallelising every point but the chunking made working with memory easier.
     */  
-    #pragma omp parallel for schedule(dynamic)
+    //#pragma omp parallel for schedule(dynamic)
     for (int chunk_start = 0; chunk_start < test_rows; chunk_start += chunk_size) {
         int current_chunk_size = (chunk_start + chunk_size > test_rows) ? (test_rows - chunk_start) : chunk_size;
         processChunk(train_data, test_data, train_rows, test_rows, train_cols, test_cols, k, chunk_start, current_chunk_size);

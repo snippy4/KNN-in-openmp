@@ -1,10 +1,10 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <float.h>
+#include<stdio.h>
+#include<stdlib.h>
+#include<math.h>
 #include<string.h>
 #include<stdbool.h>
-#include<omp.h>
+#include <float.h>
+#include <omp.h>
 
 /*This code is for reading and writing to files for the 2024-25 COMP528 CA1*/
 
@@ -187,172 +187,107 @@ void *writeResultsToFile(double *output, int numOfPoints, int numOfFeatures, cha
 	return output;
 }
 
-// Define the KD-Tree node structure
-typedef struct KDNode {
-    double* point;        // Point in n-dimensional space
-    struct KDNode *left;  // Left subtree
-    struct KDNode *right; // Right subtree
-    double class;
-} KDNode;
-
-// Global variable to hold the number of dimensions (n)
 int dimensions;
 
-// Function to create a new KD-Tree node
-KDNode* createNode(double point[], double class) {
-    KDNode* node = (KDNode*)malloc(sizeof(KDNode));
-    node->point = (double*)malloc(dimensions * sizeof(double));
-    for (int i = 0; i < dimensions; i++)
-        node->point[i] = point[i];
-    node->left = node->right = NULL;
-    node->class = class;
-    return node;
+typedef struct Node{
+    double *point;
+    struct Node *left;
+    struct Node *right;
+    double class;
+}Node;
+
+Node* newnode(double *point, double class){
+    Node* new = (Node*)malloc(sizeof(Node));
+    new->point = (double*)malloc(dimensions * sizeof(double));
+    for (int i = 0; i < dimensions; i++){
+        new->point[i] = point[i];
+    }
+    new->class = class;
+    new->left = NULL;
+    new->right = NULL;
+    return new;
 }
 
-// Insert a new point into the KD-Tree
-KDNode* insert(KDNode* root, double point[], int depth, double class) {
-    if (root == NULL) return createNode(point, class);
-    // Determine current axis
-    int axis = depth % dimensions;
+Node* insert(Node* root, double *point, double class, int depth){
 
-    if (point[axis] < root->point[axis])
-        root->left = insert(root->left, point, depth + 1, class);
-    else
-        root->right = insert(root->right, point, depth + 1, class);
-
+    if(root==NULL) return newnode(point, class);
+    else if(point[depth%dimensions] <= root->point[depth%dimensions]){
+        root->left = insert(root->left, point, class, (depth+1));
+    }
+    else{
+        root->right = insert(root->right, point, class, (depth+1));
+    }
     return root;
 }
+//proof of concept function
+Node* findmin(Node* root, int dim, int depth){
+    if(root == NULL) return NULL;
+    if(depth % dimensions == dim){
+        if(root->left == NULL) return root;
+        else return findmin(root->left, dim, depth + 1);
+    }
 
-// Helper function to calculate Euclidean distance between two points
-double distance(double point1[], double point2[]) {
+    else{
+        Node* left = findmin(root->left, dim, depth + 1);
+        Node* right = findmin(root->right, dim, depth + 1);
+        if (left == NULL) return right;
+        if (right == NULL) return left;
+        if (left->point[dim] <= right->point[dim]) return left;
+        else return right;
+    }
+}
+
+double distance(double *point1, double *point2, int size){
     double dist = 0.0;
-    for (int i = 0; i < dimensions; i++)
-        dist += (point1[i] - point2[i]) * (point1[i] - point2[i]);
+
+    for(int i = 0; i<size; i++){
+        dist += (point1[i] - point2[i])*(point1[i] - point2[i]);
+    }
     return dist;
 }
 
-// A helper struct to hold nearest neighbors
-typedef struct {
-    KDNode* node;
-    double distance;
-} Neighbor;
-// Utility function to print a point
+typedef struct NodeDist{
+    Node* node;
+    double dist;
+}NodeDist;
 
-typedef struct {
-    KDNode* closest_node;
-    double closest_distance;
-} ClosestNeighbor;
-
-void printPoint(double point[]) {
-    printf("(");
-    for (int i = 0; i < dimensions; i++) {
-        printf("%lf", point[i]);
-        if (i < dimensions - 1) printf(", ");
-    }
-    printf(")");
+void swap(NodeDist* a, NodeDist* b) {
+    NodeDist temp = *a;
+    *a = *b;
+    *b = temp;
 }
 
-// Quick helper to sort neighbors
-int compareNeighbors(const void* a, const void* b) {
-    Neighbor* n1 = (Neighbor*)a;
-    Neighbor* n2 = (Neighbor*)b;
-    if (n1->distance < n2->distance) return -1;
-    else if (n1->distance > n2->distance) return 1;
-    else return 0;
-}
-
-
-// Max-heapify function for neighbors array
-void maxHeapify(Neighbor neighbors[], int k, int i) {
+static inline void maxHeapify(NodeDist arr[], int n, int i) {
     int largest = i;
     int left = 2 * i + 1;
     int right = 2 * i + 2;
 
-    if (left < k && neighbors[left].distance > neighbors[largest].distance)
-        largest = left;
-
-    if (right < k && neighbors[right].distance > neighbors[largest].distance)
-        largest = right;
-
-    if (largest != i) {
-        Neighbor temp = neighbors[i];
-        neighbors[i] = neighbors[largest];
-        neighbors[largest] = temp;
-        maxHeapify(neighbors, k, largest);
-    }
-}
-
-// Function to insert a new neighbor in the max-heap if it's closer
-void insertNeighbor(Neighbor neighbors[], KDNode* node, double dist, int* neighbor_count, int k) {
-    if (*neighbor_count < k) {
-        // Add directly if fewer than k neighbors
-        neighbors[*neighbor_count].node = node;
-        neighbors[*neighbor_count].distance = dist;
-        (*neighbor_count)++;
-
-        if (*neighbor_count == k) {
-            // Build the heap once we've added k elements
-            for (int i = k / 2 - 1; i >= 0; i--)
-                maxHeapify(neighbors, k, i);
+    while (left < n) {
+        if (arr[left].dist > arr[largest].dist) {
+            largest = left;
         }
-    } else if (dist < neighbors[0].distance) {
-        // Replace the farthest neighbor if the new one is closer
-        neighbors[0].node = node;
-        neighbors[0].distance = dist;
-       maxHeapify(neighbors, k, 0);
-    }
-}
-
-void kNearestNeighbors(KDNode* root, double target[], int depth, Neighbor* neighbors, int* neighbor_count, int k) {
-    if (root == NULL) return;
-
-    // Calculate the distance from the target to the current root node
-    double dist = distance(target, root->point);
-
-    // Insert the current node into the neighbors array if there is space
-    if (*neighbor_count < k) {
-        neighbors[*neighbor_count].node = root;
-        neighbors[*neighbor_count].distance = dist;
-        (*neighbor_count)++;
-    } else {
-        // If the neighbors array is full, only insert if the current distance is smaller
-        if (dist < neighbors[k - 1].distance) {
-            neighbors[k - 1].node = root;
-            neighbors[k - 1].distance = dist;
+        if (right < n && arr[right].dist > arr[largest].dist) {
+            largest = right;
+        }
+        if (largest != i) {
+            swap(&arr[i], &arr[largest]);
+            i = largest;
+            left = 2 * i + 1;
+            right = 2 * i + 2;
+        } else {
+            break;
         }
     }
+}
 
-    // Sort the neighbors array based on distance (ascending)
-    qsort(neighbors, *neighbor_count, sizeof(Neighbor), compareNeighbors);
-
-    // Determine the axis at the current depth of recursion
-    int axis = depth % dimensions;
-    KDNode* nearBranch = NULL;
-    KDNode* farBranch = NULL;
-
-    // Decide which subtree to explore first based on the current axis
-    if (target[axis] < root->point[axis]) {
-        nearBranch = root->left;
-        farBranch = root->right;
-    } else {
-        nearBranch = root->right;
-        farBranch = root->left;
-    }
-
-    // Explore the near branch first
-    kNearestNeighbors(nearBranch, target, depth + 1, neighbors, neighbor_count, k);
-
-    // After exploring the near branch, check if the far branch needs to be explored
-    // If the far branch could contain closer points, check that too
-    if (fabs(target[axis] - root->point[axis]) < neighbors[k - 1].distance) {
-        kNearestNeighbors(farBranch, target, depth + 1, neighbors, neighbor_count, k);
+// Build a max-heap with the first k elements
+void buildMaxHeap(NodeDist arr[], int k) {
+    for (int i = (k / 2) - 1; i >= 0; i--) {
+        maxHeapify(arr, k, i);
     }
 }
 
-
-
-
-double findMostFrequentWithTieBreak(Neighbor arr[], int k) {
+double findMostFrequentWithTieBreak(NodeDist arr[], int k) {
     // if a test case has more than 100 classes then i hope your pillow is warm tonight
     int classCount[100] = {0}; 
     int max_count = 0;
@@ -379,20 +314,67 @@ double findMostFrequentWithTieBreak(Neighbor arr[], int k) {
     return most_frequent_class;
 }
 
-void findKNearest(KDNode* root, double target[], int k) {
-    Neighbor* neighbors = (Neighbor*)malloc(k * sizeof(Neighbor));
-    int neighbor_count = 0;
+void KNNSearch(Node* root, double* target, int k, int depth, NodeDist heap[]){
+    if (root == NULL) return;
 
-    // Perform k-Nearest Neighbors search
-    kNearestNeighbors(root, target, 0, neighbors, &neighbor_count, k);
+    double dist = distance(target, root->point, dimensions);
 
-    // Find the most frequent class from the neighbors
-    target[dimensions] = findMostFrequentWithTieBreak(neighbors, k);
+    if(root->left == NULL && root->right == NULL){
+        if(dist<heap[0].dist){
+            NodeDist newnode;
+            newnode.dist = dist;
+            newnode.node = root;
+            heap[0] = newnode;
+            maxHeapify(heap, k, 0);
 
-    // Free the neighbors array
-    free(neighbors);
+        }
+    }else {
+        int axis = depth % dimensions;
+        int dir = 0;
+        if (target[axis] < root->point[axis]){
+            KNNSearch(root->left, target, k, depth+1, heap);
+        }else{
+            KNNSearch(root->right, target, k, depth+1, heap);
+            dir = 1;
+        }
+        if(dist<heap[0].dist){
+            NodeDist newnode;
+            newnode.dist = dist;
+            newnode.node = root;
+            heap[0] = newnode;
+            maxHeapify(heap, k, 0);
+        }
+        //determine if branch is pruned
+        if(distance(target, heap[0].node->point, dimensions) > target[axis] - root->point[axis]){
+            if(dir == 1){
+                KNNSearch(root->left, target, k, depth+1, heap);
+            }else{
+                KNNSearch(root->right, target, k, depth+1, heap);
+            }
+        }
+    }
+
+
 }
 
+void KNN(Node* root, double* target, int k){
+    NodeDist heap[k];
+    // init heap
+    for(int i = 0; i<k; i++){
+        NodeDist next;
+        next.node = root;
+        next.dist = DBL_MAX;
+        heap[i] = next;
+    }
+    buildMaxHeap(heap, k);
+
+    KNNSearch(root, target, k, 0, heap);
+
+
+   target[dimensions] = findMostFrequentWithTieBreak(heap, k);
+
+        
+}
 
 // Sample main function
 int main(int argc, char *argv[]){
@@ -400,28 +382,30 @@ int main(int argc, char *argv[]){
     int train_rows = readNumOfPoints(argv[1]);
     int train_cols = readNumOfFeatures(argv[1]);
     double *train_data = readDataPoints(argv[1], train_rows, train_cols);
-
     int test_rows = readNumOfPoints(argv[2]);
     int test_cols = readNumOfFeatures(argv[2]);
     double *test_data = readDataPoints(argv[2], test_rows, test_cols);
-
     char *outfile = argv[3];
     int k = atoi(argv[4]);
-    dimensions = train_cols-1;    
-
-    KDNode* root = NULL;
-    int num_points;
-    num_points = train_rows;
-
-    for (int i = 0; i < num_points; i++) {
+    dimensions = train_cols-1;   
+   
+    Node* root = NULL;
+    for (int i = 0; i < train_rows; i++) {
         double* point = &train_data[i * train_cols];
-        root = insert(root, point, 0, train_data[i * train_cols + dimensions]);   
+        root = insert(root, point, train_data[i * train_cols + dimensions], 0);   
     }
-
     #pragma omp parallel for
     for(int i = 0; i < test_rows; i++){
-        findKNearest(root, &test_data[i * test_cols], k);
+        KNN(root, &test_data[i * test_cols], k);
     }
+    /*
+    printf("finding min in dim 0\n");
+    Node* min = findmin(root, 1, 0);
+    for(int i = 0; i < dimensions; i++){
+        printf("%lf,", min->point[i]);
+    }
+    */
+
 
     writeResultsToFile(test_data, test_rows, test_cols, outfile);
 

@@ -4,9 +4,8 @@
 #include <math.h>
 #include <string.h>
 #include <stdbool.h>
-#include <omp.h>
+//#include <omp.h>
 #include <immintrin.h> 
-#include <file-reader.h>
 
 #define CHUNK_SIZE 40  // Define chunk size to process large datasets
 
@@ -383,7 +382,7 @@ int main(int argc, char *argv[]) {
     as ALL of the processing for each chunk of points can be done completely independantly, probably missing
     some slight efficency by not parallelising every point but the chunking made working with memory easier.
     */  
-    #pragma omp parallel for schedule(dynamic)
+    //#pragma omp parallel for schedule(dynamic)
     for (int chunk_start = 0; chunk_start < test_rows; chunk_start += chunk_size) {
         int current_chunk_size = (chunk_start + chunk_size > test_rows) ? (test_rows - chunk_start) : chunk_size;
         processChunk(train_data, test_data, train_rows, test_rows, train_cols, test_cols, k, chunk_start, current_chunk_size);

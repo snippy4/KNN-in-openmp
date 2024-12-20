@@ -4,8 +4,8 @@
 #include <math.h>
 #include <string.h>
 #include <stdbool.h>
+//#include <omp.h>
 #include <immintrin.h> 
-#include <file-reader.h>
 
 #define CHUNK_SIZE 40  // Define chunk size to process large datasets
 
@@ -180,7 +180,7 @@ void *writeResultsToFile(double *output, int numOfPoints, int numOfFeatures, cha
 			if(j < numOfFeatures - 1) fprintf(file, "%lf,", output[i * numOfFeatures + j]);
 			else fprintf(file, "%lf", output[i * numOfFeatures + j]);
 		}
-		fprintf(file, "\n\0");
+		fprintf(file, "\n");
         
     }
 

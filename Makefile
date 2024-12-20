@@ -17,9 +17,5 @@ iccserial: knn.c
 iccomp: knnomp.c
 	icc $(CFLAGS) -qopenmp -o knnomp-icc knnomp.c
 
-gccaknn: aknn.c
-	$(CC) $(CFLAGS) $(OMP_FLAGS) -o aknn-gcc aknn.c
-
 clean:
 	rm -f knn knnomp
-

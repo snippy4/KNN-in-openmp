@@ -19,177 +19,6 @@
 
 /*If there are any issues with this code, please contact: h.j.forbes@liverpool.ac.uk*/
 
-int readNumOfPoints(char*);
-int readNumOfFeatures(char*);
-int readNumOfClasses(char *filename);
-double *readDataPoints(char*, int, int);
-void *writeResultsToFile(double*, int, int, char*);
-
-/*Gets the number of the coordinates in the file. Returns as a single integer*/
-int readNumOfPoints(char *filename){
-	FILE *file = fopen(filename, "r");
-	int numOfPoints = 0;
-
-	if(file == NULL){
-		return -1;
-	}
-
-	char line[1000];
-
-	printf("Reading num of points: ");
-
-	while(fgets(line, sizeof(line), file) != NULL){
-		numOfPoints++;
-	}
-	printf("%d\n", numOfPoints);
-
-	fclose(file);
-
-    return numOfPoints;
-}
-
-int readNumOfFeatures(char *filename){
-	FILE *file = fopen(filename, "r");
-
-	if(file == NULL){
-		return -1;
-	}
-
-	char line[1000];
-
-	char *p;
-
-	printf("Reading num of features: ");
-	if(fgets(line, sizeof(line), file) != NULL){
-		int numOfFeatures = 1;
-
-		for(p = line; *p != '\0'; p++){
-			if(*p == ','){
-				numOfFeatures++;
-			}
-		}
-
-		fclose(file);
-		printf("%d\n", numOfFeatures);
-		return numOfFeatures;
-	}
-
-	fclose(file);
-	return -1;
-}
-
-int readNumOfClasses(char *filename){
-	FILE *file = fopen(filename, "r");
-
-	if(file == NULL){
-		return -1;
-	}
-
-	char line[1000];
-
-	int numOfClasses = 0;
-
-	printf("Reading num of classes: ");
-	while(fgets(line, sizeof(line), file) != NULL){
-
-		char *lastcomma = strrchr(line, ',');
-		char *token = strtok(lastcomma, ",");
-
-		int class = atoi(token);
-
-		if(class > numOfClasses){
-			numOfClasses = class;
-		}
-
-	}
-
-	printf("%d\n", numOfClasses + 1);
-
-	fclose(file);
-	return numOfClasses + 1;
-}
-/*Gets the data from the file. Returns as a 2D array of doubles. 
-The program returns all the features, and the final element is the class label*/
-double *readDataPoints(char *filename, int numOfPoints, int numOfFeatures){
-	FILE *file = fopen(filename,"r");
-    int i;
-
-	char line[1000];
-    
-    if(file == NULL) {
-        printf("Unable to open file: %s\n", filename);
-        return NULL;
-    }
-
-	double *dataPoints = (double *)malloc(numOfPoints * numOfFeatures * sizeof(double *));
-
-	if(dataPoints == NULL){
-		return NULL;
-	}
-
-	int lineNum = 0;
-
-	int featureIndex;
-
-
-	printf("Reading data points: ");
-	while(fgets(line, sizeof(line), file) != NULL && lineNum < numOfPoints){
-		char* token = strtok(line, ",");
-		featureIndex = 0;
-
-		while(token != NULL && featureIndex < numOfFeatures){
-			
-			dataPoints[lineNum * numOfFeatures + featureIndex] = atof(token);
-			//if(lineNum<10) printf("LineNum: %d, NumFeatures: %d, Value = %f\n", lineNum, numOfFeatures, atof(token));
-			token = strtok(NULL, ",");
-			featureIndex++;
-		}
-
-		//printf("\n");
-
-		lineNum++;
-
-		/*
-		if (sscanf(line, "%lf,%lf", &x, &y) == 2){
-			coords[lineNum][0] = x;
-			coords[lineNum][1] = y;
-			lineNum++;
-		}*/
-	}
-
-	printf("%d\n", lineNum + 1);
-
-	fclose(file);
-
-	return dataPoints;
-}
-
-void *writeResultsToFile(double *output, int numOfPoints, int numOfFeatures, char *filename){
-	
-	FILE *file = fopen(filename, "w");
-	int i, j;	
-	
-	if(file == NULL){
-		printf("Unable to open file: %s", filename);
-		return NULL;
-	}
-
-	printf("Writing output data to file: %s:\nnumber of data points: %d\nnumber of features: %d\n", filename, numOfPoints, numOfFeatures);
-    for(i=0; i < numOfPoints; i++) {
-		for(j = 0; j < numOfFeatures; j++){
-			if(j < numOfFeatures - 1) fprintf(file, "%lf,", output[i * numOfFeatures + j]);
-			else fprintf(file, "%lf", output[i * numOfFeatures + j]);
-		}
-		fprintf(file, "\n");
-        
-    }
-
-	fclose(file);
-
-	//if not null not returned, then it is pointer to output meaning success.
-	return output;
-}
-
 // used for storing distances
 typedef struct {
     double value;  
@@ -293,7 +122,7 @@ void processChunk(double *train_data, double *test_data, int train_rows, int tes
             distances[n].value = INFINITY; 
         }
 
-        // calculate distances from the test point to each training point
+        // calculate distances from the test point to each training point 
         for (int j = 0; j < train_rows; j++) {
             __builtin_prefetch(&train_data[(j + 1) * train_cols], 0, 1);
 
@@ -305,7 +134,8 @@ void processChunk(double *train_data, double *test_data, int train_rows, int tes
 
             // v_sum = [0,0,0,0]
             __m256d v_sum = _mm256_setzero_pd();
-            int d = 0;
+            // d = 1 to account for id
+            int d = 1;
 
             // vectorized distance calculation for 4 dimensions at a time
             for (; d <= test_cols - 5; d += 4) {
@@ -361,39 +191,31 @@ void processChunk(double *train_data, double *test_data, int train_rows, int tes
     free(distances); 
 }
 
-int main(int argc, char *argv[]) {
-    // if this bit needs explaining thats not my problem
-    int train_rows = readNumOfPoints(argv[1]);
-    int train_cols = readNumOfFeatures(argv[1]);
-    double *train_data = readDataPoints(argv[1], train_rows, train_cols);
 
-    int test_rows = readNumOfPoints(argv[2]);
-    int test_cols = readNumOfFeatures(argv[2]);
-    double *test_data = readDataPoints(argv[2], test_rows, test_cols);
+double knn(double *train_data, double *test_data, int k, int train_rows, int test_rows, int features){
+    int chunk_size = 10;
+    double *points = (double *)malloc(sizeof(double) * train_rows);
+    for(int i = 0; i<test_rows;i++){
+        points[i] = test_data[i * features + (features - 1)];
+    }
 
-    char *outfile = argv[3];
-    int k = atoi(argv[4]);
-
-    // todo: find better sizing thats dynamic with number of points
-    int chunk_size = CHUNK_SIZE;
-
-    /*
-    process each chunk in parallel, this was my first approach and i am yet to find a better one
-    as ALL of the processing for each chunk of points can be done completely independantly, probably missing
-    some slight efficency by not parallelising every point but the chunking made working with memory easier.
-    */  
     #pragma omp parallel for schedule(dynamic)
     for (int chunk_start = 0; chunk_start < test_rows; chunk_start += chunk_size) {
         int current_chunk_size = (chunk_start + chunk_size > test_rows) ? (test_rows - chunk_start) : chunk_size;
-        processChunk(train_data, test_data, train_rows, test_rows, train_cols, test_cols, k, chunk_start, current_chunk_size);
+        processChunk(train_data, test_data, train_rows, test_rows, features, features, k, chunk_start, current_chunk_size);
     }
 
-    writeResultsToFile(test_data, test_rows, test_cols, outfile);
+    int differences = 0;
 
-    // no memory leaks today
- 
-   free(train_data);
-    free(test_data);
+    #pragma omp parallel for reduction(+:differences)
+    for (int i = 0; i < test_rows; i++) {
+        if (points[i] != test_data[i * features + (features - 1)]) {
+            differences++;
+        }
+    }
 
-    return 0;
+    double acc;
+    acc = ((double)test_rows - (double)differences) / (double)test_rows;
+    free(points);
+    return acc;
 }

@@ -201,6 +201,9 @@ double knn(double *train_data, double *test_data, int k, int train_rows, int tes
 
     #pragma omp parallel for schedule(dynamic)
     for (int chunk_start = 0; chunk_start < test_rows; chunk_start += chunk_size) {
+        if( chunk_start == 0){
+        printf("number of threads is: %d\n", omp_get_num_threads());
+        }
         int current_chunk_size = (chunk_start + chunk_size > test_rows) ? (test_rows - chunk_start) : chunk_size;
         processChunk(train_data, test_data, train_rows, test_rows, features, features, k, chunk_start, current_chunk_size);
     }

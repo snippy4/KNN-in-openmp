@@ -12,11 +12,23 @@ void printArray(void *array, char array_name[500], int m, int n, char type);
 
 
 int main(int argc, char *argv[]) {
-    MPI_Init(&argc, &argv);
+    int provided;
+
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+
 
     int rank, num_procs;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+
+    if (provided < MPI_THREAD_FUNNELED) {
+    if (rank == 0) {
+        printf("The MPI implementation does not provide the required thread support\n");
+    }
+    MPI_Finalize();
+    exit(EXIT_FAILURE);
+    }
+
 
     if (rank == 0) {
         printf("\n\n===============STARTING KNN WITH MPI===============\n\n");

@@ -10,39 +10,16 @@
 
 # Specific course queue, exclusive use (for timings), max 1 min wallclock time
 #SBATCH -p lowpriority
-#SBATCH -t 5:00
-#SBATCH -N 1
-#SBATCH -n 40
-
+#SBATCH -t 30:00
+#SBATCH -N 2
+#SBATCH -n 80
+export OMP_NUM_THREADS=8
 # load modules
 module load compilers/intel/2019u5
+module load mpi/intel-mpi/2019u5/bin
+module load libs/nvidia-cuda/12.4.0/bin
+# GNU no-opt
+mpicc -fopenmp -march=native -lm -std=c99 -O3 k-folds-mpi.c -o knnmpi.out
+time mpirun -np 1 ./knnmpi.out "data/asteroids.csv" "out.csv" 3 10
 
-# number of threads to run on
-export OMP_NUM_THREADS=40
-# The program to run (replace with your actual executable)
-
-# Number of times to run the program
-NUM_RUNS=5
-
-# Variable to accumulate total time
-total_time=0
-gcc -fopenmp -march=native -mavx2 -O3 knnomp.c -std=c99 -o knn.out
-# Loop to run the program NUM_RUNS times
-for ((i = 1; i <= NUM_RUNS; i++)); do
-    # Measure the time taken to run the program
-    start_time=$(date +%s.%N) # Get start time in seconds
-    ./knn.out "data/asteroids_train.csv" "data/asteroids_test.csv" "out.csv" 3
-    end_time=$(date +%s.%N)   # Get end time in seconds
-
-    # Calculate elapsed time
-    elapsed_time=$(echo "$end_time - $start_time" | bc)
-
-    # Add elapsed time to total
-    total_time=$(echo "$total_time + $elapsed_time" | bc)
-
-    echo "Run $i: $elapsed_time seconds"
-done
-
-# Calculate average time
-average_time=$(echo "scale=2; $total_time / $NUM_RUNS" | bc)
-echo "Average time over $NUM_RUNS runs: $average_time seconds"
+echo '-------'

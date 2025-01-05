@@ -21,14 +21,29 @@ int main(int argc, char *argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
 
-    if (provided < MPI_THREAD_FUNNELED) {
-    if (rank == 0) {
-        printf("The MPI implementation does not provide the required thread support\n");
-    }
-    MPI_Finalize();
-    exit(EXIT_FAILURE);
-    }
+    int max_procs = atoi(argv[4]);
+    MPI_Comm new_comm = MPI_COMM_WORLD; // Default to MPI_COMM_WORLD
+    int new_size = num_procs;
 
+    // Restrict the number of processes
+    if (num_procs > max_procs) {
+        if (rank == 0) {
+            printf("Too many processes! Limiting to %d.\n", max_procs);
+        }
+        if (rank < max_procs) {
+            MPI_Comm_split(MPI_COMM_WORLD, 0, rank, &new_comm); // Keep first max_procs
+        } else {
+            MPI_Comm_split(MPI_COMM_WORLD, MPI_UNDEFINED, rank, &new_comm); // Exclude others
+        }
+
+        if (rank >= max_procs) {
+            MPI_Finalize();
+            return 0;
+        }
+
+        MPI_Comm_size(new_comm, &new_size);
+        MPI_Comm_rank(new_comm, &rank);
+    }
 
     if (rank == 0) {
         printf("\n\n===============STARTING KNN WITH MPI===============\n\n");
@@ -63,18 +78,18 @@ int main(int argc, char *argv[]) {
     }
 
     // Broadcast shared data to all processes
-    MPI_Bcast(&totalNumPoints, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&numFeatures, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&k, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&numFolds, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&totalNumPoints, 1, MPI_INT, 0, new_comm);
+    MPI_Bcast(&numFeatures, 1, MPI_INT, 0, new_comm);
+    MPI_Bcast(&k, 1, MPI_INT, 0, new_comm);
+    MPI_Bcast(&numFolds, 1, MPI_INT, 0, new_comm);
 
     if (rank != 0) {
         pointsInFold = (int *)malloc(numFolds * sizeof(int));
         originalData = (double *)malloc(totalNumPoints * numFeatures * sizeof(double));
     }
 
-    MPI_Bcast(pointsInFold, numFolds, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(originalData, totalNumPoints * numFeatures, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(pointsInFold, numFolds, MPI_INT, 0, new_comm);
+    MPI_Bcast(originalData, totalNumPoints * numFeatures, MPI_DOUBLE, 0, new_comm);
 
     // Distribute folds among processes
     int folds_per_proc = numFolds / num_procs;
@@ -86,6 +101,8 @@ int main(int argc, char *argv[]) {
     size_t maxTest_bytes = pointsInFold[numFolds - 1] * numFeatures * sizeof(double);
     double *currTrain = (double *)malloc(maxTrain_bytes);
     double *currTest = (double *)malloc(maxTest_bytes);
+
+   
 
     size_t testOffset = 0;
     for (int currFold = fold_start; currFold < fold_end; currFold++) {
@@ -113,7 +130,7 @@ int main(int argc, char *argv[]) {
         finalResults = (double *)malloc((numFolds + 1) * sizeof(double));
     }
 
-    MPI_Gather(results, fold_end - fold_start, MPI_DOUBLE, finalResults, fold_end - fold_start, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Gather(results, fold_end - fold_start, MPI_DOUBLE, finalResults, fold_end - fold_start, MPI_DOUBLE, 0, new_comm);
 
     if (rank == 0) {
         testOffset = folds_per_proc * num_procs * numFeatures * pointsInFold[0];
